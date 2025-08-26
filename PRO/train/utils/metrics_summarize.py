@@ -62,4 +62,14 @@ def create_reward_fn_3():
     
     return get_score, 140
 
+def create_reward_fn_fabe():
+    def get_score(rewards):
+       if rewards is not None:
+           if isinstance(rewards, torch.Tensor):
+               return rewards.view(-1)
+           else:
+               return torch.tensor(rewards, dtype=torch.float).view(-1)
+
+    return get_score, 32
+
 create_reward_fn = create_reward_fn_3

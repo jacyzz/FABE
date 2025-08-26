@@ -1,6 +1,6 @@
 import os
 import json
-from utils.config import args
+from utils.config import init_args
 import math
 from scipy.stats import poisson
 from tqdm import tqdm
@@ -8,20 +8,19 @@ import numpy as np
 import torch
 from accelerate.logging import get_logger
 from .data_manager import HH_DataManager, Summarize_DataManager
+from .generic_data_manager import GenericDataManager
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
-from transformers import (
-    CONFIG_MAPPING,
-    MODEL_MAPPING,
-    AutoConfig,
-    AutoModelForCausalLM,
-)
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from transformers.models.auto.modeling_auto import MODEL_MAPPING, AutoModelForCausalLM
+from peft import get_peft_model, LoraConfig, TaskType
+args = init_args()
 if args.task == "hh":
     from utils.metrics_hh import create_reward_fn
 elif args.task == "summarize":
     from utils.metrics_summarize import create_reward_fn
 else:
-    raise ValueError("Invalid task name!")
+    from utils.metrics_hh import create_reward_fn  # 默认使用hh的reward函数
 
 class ProcessManager():
     def __init__(
@@ -31,11 +30,12 @@ class ProcessManager():
     ):
         self.accelerator = accelerator
         self.model_path = model_path
+        
 
-        # set config
+        # Set model config
         self.model_config = AutoConfig.from_pretrained(self.model_path)
         
-        # set datamanager
+        # Set datamanager
         if args.task == "hh":
             self.data_manager = HH_DataManager(
                 self.model_config,
@@ -47,20 +47,52 @@ class ProcessManager():
                 args.training_stage_num,
             )
         else:
-            raise ValueError("Invalid task name!")
+            # 使用GenericDataManager支持其他任务
+            self.data_manager = GenericDataManager(
+                config=args,
+                training_stage=args.training_stage_num,
+                model_type="auto",  # 自动检测模型类型
+                task_type=args.task,
+                tokenizer_path=model_path
+            )
         
-        # set model
-        self.model = AutoModelForCausalLM.from_pretrained(self.model_path,config=self.model_config)
+        # Load base model
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_path,
+            config=self.model_config,
+            torch_dtype=torch.bfloat16 if args.bf16 else (torch.float16 if args.fp16 else torch.float32)
+        )
+        
+        # Add LoRA if enabled
+        if args.use_lora:
+            lora_config = LoraConfig(
+                r=args.lora_r,
+                lora_alpha=args.lora_alpha, 
+                target_modules=args.lora_target_modules,
+                lora_dropout=args.lora_dropout,
+                bias="none",
+                task_type=TaskType.CAUSAL_LM
+            )
+            self.model = get_peft_model(self.model, lora_config)
+            self.model.print_trainable_parameters()
+        
         self.model.resize_token_embeddings(len(self.data_manager.tokenizer))
-        
         self.logger = get_logger(__name__)
     
     def compute_loss(self, model, batch, print_loss):
-        """
-            batch = [batch, training_stage, seq_len]
-        """
+        # 添加维度检查
+        # print(f"Batch shapes:")
+        # for key, value in batch.items():
+        #     if isinstance(value, torch.Tensor):
+        #         print(f"{key}: {value.shape}")
+        
         batch_size = batch["labels"].shape[0]
         temp_training_stage = batch["labels"].shape[1]
+        
+        # 确保批次大小大于0
+        if batch_size == 0:
+            raise ValueError("Empty batch detected")
+        
         sub_batches = [{key: batch[key][:,time,:] for key in ["input_ids", "attention_mask"]} for time in range(temp_training_stage)]
         
         score_list = []
@@ -112,7 +144,7 @@ class ProcessManager():
 
     def prepare_hfa_dataloader(self, train_file_path=args.train_file_path, train_file_name = None):
         # get dataloader
-        if train_file_name == None:
+        if train_file_name is None:
             train_file_name = os.listdir(train_file_path)[0]
         
         self.logger.info(f"Load training data from {os.path.join(train_file_path, train_file_name)}")
@@ -165,7 +197,7 @@ class ProcessManager():
         model, optimizer, _ = self.accelerator.prepare(
             self.model, optimizer, placeholder_dataloader
         )
-        self.model = None
+        # 不要将self.model设置为None，保持引用
 
         total_batch_size = args.per_device_train_batch_size * self.accelerator.num_processes * args.gradient_accumulation_steps
         self.logger.info("***** Running training *****", main_process_only=True)
@@ -331,6 +363,10 @@ class ProcessManager():
         torch.cuda.empty_cache()
         model.eval()
 
+        # 确保路径参数不为None
+        infer_file_path = infer_file_path or args.validation_file_path
+        infer_file_name = infer_file_name or args.validation_file_name
+
         with open(os.path.join(infer_file_path, infer_file_name), "r", encoding='utf-8') as f:
             infer_data = [json.loads(l) for l in f.readlines()]
 
@@ -366,10 +402,17 @@ class ProcessManager():
         if path is not None and path != '':
             os.makedirs(path, exist_ok=True)
             tokenizer.save_pretrained(path)
-            model.save_pretrained(
-                path, 
-                is_main_process=self.accelerator.is_main_process, 
-                save_function=self.accelerator.save,
-            )
+            if args.use_lora:
+                model.save_pretrained(
+                    path,
+                    is_main_process=self.accelerator.is_main_process,
+                    save_function=self.accelerator.save,
+                )
+            else:
+                model.save_pretrained(
+                    path,
+                    is_main_process=self.accelerator.is_main_process,
+                    save_function=self.accelerator.save,
+                )
         else:
             self.logger.error('No save path!', main_process_only=True)

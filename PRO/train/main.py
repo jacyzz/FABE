@@ -5,12 +5,14 @@ from accelerate import Accelerator, DistributedType
 from accelerate.logging import get_logger
 from accelerate.utils import InitProcessGroupKwargs
 # from transformers.utils import logging
-from utils.config import args
+from utils.config import init_args
 from utils.process_manager import ProcessManager
 import gc
 import torch
 from datetime import timedelta
 
+# 在程序开始时初始化参数
+args = init_args()
 
 kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=5400))
 accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, kwargs_handlers=[kwargs])

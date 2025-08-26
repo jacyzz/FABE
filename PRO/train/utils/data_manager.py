@@ -17,7 +17,10 @@ from transformers import (
 )
 
 class HH_DataManager():
-    def __init__(self, config, training_stage, tokenizer_path = args.model_name_or_path):
+    def __init__(self, config, training_stage, tokenizer_path = None):
+        if tokenizer_path is None:
+            from .config import args
+            tokenizer_path = args.model_name_or_path
         self.config = config
         if self.config.architectures[0].lower() == "llamaforcausallm":
             self.tokenizer = LlamaTokenizer.from_pretrained(tokenizer_path, use_fast=False)
@@ -194,7 +197,10 @@ class HH_DataManager():
         return instant_text
     
 class Summarize_DataManager():
-    def __init__(self, config, training_stage, tokenizer_path = args.model_name_or_path):
+    def __init__(self, config, training_stage, tokenizer_path = None):
+        if tokenizer_path is None:
+            from .config import args
+            tokenizer_path = args.model_name_or_path
         self.config = config
         if self.config.architectures[0].lower() == "llamaforcausallm":
             self.tokenizer = LlamaTokenizer.from_pretrained(tokenizer_path, use_fast=False)

@@ -98,7 +98,7 @@ class ProcessManager():
         score_list = []
         suffix_mask_list = []
         for batch_index, sub_batch in enumerate(sub_batches):
-            local_outputs = model(**sub_batch, output_hidden_states=True, return_dict=True)
+            local_outputs = model(**sub_batch, return_dict=True)
             local_logits = local_outputs.logits #[batch, seq_len, token_num]
             local_mask = sub_batch["attention_mask"] & (~batch["prefix_mask"][:, batch_index, :]) #[batch, seq_len]
             local_labels = batch["labels"][:, batch_index, :]
@@ -284,6 +284,10 @@ class ProcessManager():
                 
                 print_loss = [[] for i in range(training_stage)]
                 for step, batch in enumerate(hfa_dataloader):
+                    # 跳过None的batch（过长的样本）
+                    if batch is None:
+                        continue
+                    
                     model.train()
                     with self.accelerator.accumulate(model):
                         self.compute_loss(model, batch, print_loss)

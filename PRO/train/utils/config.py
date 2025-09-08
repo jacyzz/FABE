@@ -25,6 +25,12 @@ def parse_args():
         default=2,
     )
     parser.add_argument(
+        "--model_template",
+        type=str,
+        default="deepseek",
+        help="The template for formatting the prompt. E.g., 'deepseek', 'default'."
+    )
+    parser.add_argument(
         "--index",
         type=str,
         default="100",
@@ -45,10 +51,10 @@ def parse_args():
         default=1,
     )
     parser.add_argument(
-        "--train_file_path", type=str, default=None,
+        "--train_file_path", type=str, default=None, nargs='+', help="Path to the training data file(s)."
     )
     parser.add_argument(
-        "--validation_file_path", type=str, default=None,
+        "--validation_file_path", type=str, default=None, nargs='+', help="Path to the validation data file(s)."
     )
     parser.add_argument(
         "--validation_file_name", type=str, default=None,
@@ -142,78 +148,3 @@ def init_args():
         args = parse_args()
         setup_seed(args.seed)
     return args
-
-# 模型配置字典
-MODEL_CONFIGS = {
-    "llama": {
-        "tokenizer_class": "LlamaTokenizer",
-        "special_tokens": {"pad_token": "</s>", "bos_token": "<s>", "eos_token": "</s>"},
-        "stop_sequences": ["Human:", "Assistant:", "\n\n"]
-    },
-    "deepseek-coder": {
-        "tokenizer_class": "AutoTokenizer", 
-        "special_tokens": {"pad_token": "", "bos_token": "", "eos_token": ""},
-        "stop_sequences": ["\n\n", "\nclass", "\ndef", "\n#", "\n//"]
-    },
-    "starcoder": {
-        "tokenizer_class": "AutoTokenizer",
-        "special_tokens": {"pad_token": "<|endoftext|>", "bos_token": "<|endoftext|>", "eos_token": "<|endoftext|>"},
-        "stop_sequences": ["\n\n", "<|endoftext|>"]
-    },
-    "auto": {
-        "tokenizer_class": "AutoTokenizer",
-        "special_tokens": {"pad_token": "", "bos_token": "", "eos_token": ""},
-        "stop_sequences": ["\n\n"]
-    }
-}
-
-# 模型模板配置
-MODEL_TEMPLATES = {
-    "deepseek-coder": {
-        "format": "chatml",
-        "system_prefix": "<|im_start|>system\n",
-        "system_suffix": "<|im_end|>\n",
-        "user_prefix": "<|im_start|>user\n",
-        "user_suffix": "<|im_end|>\n",
-        "assistant_prefix": "<|im_start|>assistant\n",
-        "assistant_suffix": "<|im_end|>\n"
-    },
-    "starcoder2": {
-        "format": "simple",
-        "user_prefix": "### Instruction:\n",
-        "user_suffix": "\n",
-        "assistant_prefix": "### Response:\n",
-        "assistant_suffix": ""
-    },
-    "codellama": {
-        "format": "llama2",
-        "system_prefix": "<<SYS>>\n",
-        "system_suffix": "\n<</SYS>>\n\n",
-        "user_prefix": "[INST] ",
-        "user_suffix": " [/INST]",
-        "assistant_prefix": " ",
-        "assistant_suffix": "</s>"
-    },
-    "default": {
-        "format": "simple",
-        "user_prefix": "Human: ",
-        "user_suffix": "\nAssistant:",
-        "assistant_prefix": " ",
-        "assistant_suffix": ""
-    }
-}
-
-# 防御任务系统提示配置
-DEFENSE_SYSTEM_PROMPTS = {
-    "default": "你是一个代码安全专家，负责检测和清除代码中的潜在后门和安全漏洞。请分析给定的代码，识别任何可疑模式，并提供安全的替代方案。",
-    "backdoor_detection": "你是一个防御模型，专门检测和清除代码中的后门。对于每个代码片段，请仔细分析其安全性，如果发现后门，请提供修复后的安全版本。",
-    "code_sanitization": "作为代码安全检查员，你的任务是清理代码中的安全漏洞和可疑模式，确保代码的安全性。"
-}
-
-# 提示策略配置
-PROMPT_STRATEGY = {
-    "use_system_prompt": True,
-    "system_prompt_key": "default",
-    "instruction_template": "请分析以下代码的安全性：\n{code}",
-    "batch_inference": True
-}

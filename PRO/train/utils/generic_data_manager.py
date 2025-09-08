@@ -128,7 +128,10 @@ class GenericDataManager:
         seq_len = batch["attention_mask"].shape[1]
         prefix_mask = []
         for p_len in ps_lens:
-            assert seq_len > p_len
+            if seq_len <= p_len:
+                # 跳过这个样本，返回None
+                print(f"Skipping sample: seq_len({seq_len}) <= p_len({p_len})")
+                return None
             prefix_mask.append(
                 [1 if i<p_len else 0 for i in range(seq_len)]
             )

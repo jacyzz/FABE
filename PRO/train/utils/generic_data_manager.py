@@ -2,7 +2,6 @@ import torch
 from torch.utils.data import DataLoader
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.llama import LlamaTokenizer
-from .config import MODEL_CONFIGS, MODEL_TEMPLATES, DEFENSE_SYSTEM_PROMPTS, PROMPT_STRATEGY
 
 class GenericDataManager:
     def __init__(self, config, training_stage, model_type="auto", task_type="hh", tokenizer_path=None):
@@ -11,42 +10,39 @@ class GenericDataManager:
         self.model_type = model_type
         self.task_type = task_type
         
-        # 获取模型配置
-        model_config = MODEL_CONFIGS.get(model_type, MODEL_CONFIGS["auto"])
-        self.model_config = model_config
+        # 简化配置 - 使用基本默认值
+        self.model_config = {
+            "tokenizer_class": "AutoTokenizer",
+            "special_tokens": {},
+            "stop_sequences": ["<|endoftext|>", "</s>"]
+        }
         
-        # 获取模型模板配置
-        self.model_template = MODEL_TEMPLATES.get(model_type, MODEL_TEMPLATES["default"])
-        
-        # 获取防御系统提示
-        self.system_prompt = DEFENSE_SYSTEM_PROMPTS.get(
-            PROMPT_STRATEGY["system_prompt_key"], 
-            DEFENSE_SYSTEM_PROMPTS["default"]
-        )
-        
-        # 获取提示策略
-        self.use_system_prompt = PROMPT_STRATEGY["use_system_prompt"]
-        self.instruction_template = PROMPT_STRATEGY["instruction_template"]
+        # 简化模板配置
+        self.model_template = "default"
+        self.system_prompt = ""
+        self.use_system_prompt = False
+        self.instruction_template = "{instruction}"
         
         # 动态加载tokenizer
-        tokenizer_class = getattr(__import__('transformers'), model_config["tokenizer_class"])
-        self.tokenizer = tokenizer_class.from_pretrained(
-            tokenizer_path if tokenizer_path else self.config.model_name_or_path,
-            use_fast=False
-        )
-        
-        # 应用特殊标记
-        for token_name, token_value in model_config["special_tokens"].items():
-            if token_value:
-                setattr(self.tokenizer, token_name, token_value)
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_path if tokenizer_path else self.config.model_name_or_path,
+                use_fast=False
+            )
+        except:
+            # 备用方案
+            self.tokenizer = LlamaTokenizer.from_pretrained(
+                tokenizer_path if tokenizer_path else self.config.model_name_or_path,
+                use_fast=False
+            )
         
         # 设置通用参数
         self.padding = True
-        self.max_length = self.config.block_size
+        self.max_length = getattr(self.config, 'block_size', 2048)
         self.pad_to_multiple_of = 8
         self.return_tensors = "pt"
         self.add_special_tokens = True
-        self.stop_sequences = model_config["stop_sequences"]
+        self.stop_sequences = ["<|endoftext|>", "</s>"]
     
     def batch_decode(self, model_output):
         return self.tokenizer.batch_decode(model_output, skip_special_tokens=True)

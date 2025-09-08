@@ -36,11 +36,18 @@ from transformers import (
 )
 
 class Coding_DataManager():
-    def __init__(self, config, training_stage, tokenizer_path = None):
+    def __init__(self, config, training_stage, tokenizer_path = None, task_type = "coding"):
+        # 导入全局args配置
+        from .config import args
+        self.args = args  # 保存args引用
+        
         if tokenizer_path is None:
-            from .config import args
             tokenizer_path = args.model_name_or_path
+            task_type = getattr(args, 'task', 'coding')  # 获取任务类型
+        
         self.config = config
+        self.task_type = task_type  # 保存任务类型
+        
         # LlamaTokenizer is deprecated. Use AutoTokenizer instead for consistency.
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=False)
         
@@ -49,12 +56,12 @@ class Coding_DataManager():
             self.tokenizer.pad_token = self.tokenizer.eos_token
         
         self.padding = True
-        self.max_length = args.block_size
+        self.max_length = self.args.block_size
         self.pad_to_multiple_of = 8
         self.return_tensors = "pt"
         self.add_special_tokens = True
         self.training_stage = training_stage
-        self.template = get_template(args.model_template)
+        self.template = get_template(self.args.model_template)
 
     def train_data_collator(self, features):
         samples_num = len(features)
@@ -143,8 +150,8 @@ class Coding_DataManager():
             raw_datasets, 
             shuffle=not stream, # Streaming datasets cannot be shuffled
             collate_fn=data_collator, 
-            batch_size=args.per_device_train_batch_size,
-            num_workers=2,
+            batch_size=self.args.per_device_train_batch_size,
+            num_workers=8,
             pin_memory=True,
             persistent_workers=True
         )

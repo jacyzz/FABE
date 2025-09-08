@@ -50,22 +50,28 @@ python /home/nfs/u2023-zlb/FABE/Tuna/src/train_tuna.py \
     --output_dir $OUTPUT_DIR \
     --logging_dir $LOG_DIR \
     --num_train_epochs 3 \
-    --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 16 \
-    --learning_rate 5e-5 \
-    --model_max_length 2048 \
+    --per_device_train_batch_size 4 \
+    --gradient_accumulation_steps 8 \
+    --learning_rate 3e-5 \
+    --model_max_length 4096 \
     --peft lora \
-    --lora_r 32 \
-    --lora_alpha 64 \
-    --lora_dropout 0.1 \
+    --lora_r 64 \
+    --lora_alpha 128 \
+    --lora_dropout 0.05 \
     --chat_template deepseek \
     --bf16 \
     --tf32 True \
     --optim "adamw_torch" \
+    --warmup_ratio 0.03 \
+    --lr_scheduler_type "cosine" \
     --logging_steps 10 \
     --save_strategy "steps" \
-    --save_steps 500 \
+    --save_steps 250 \
+    --eval_strategy "steps" \
+    --eval_steps 250 \
     --save_total_limit 3 \
+    --dataloader_num_workers 8 \
+    --dataloader_pin_memory True \
     --report_to "tensorboard"
 
 # --- 训练状态检查 ---

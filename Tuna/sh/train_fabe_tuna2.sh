@@ -1,87 +1,45 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=2
+root_dir=/home/nfs/u2023-zlb/FABE
+MODEL=/home/nfs/share-yjy/local_llm/BigCode/starcoder2-7b
+datadir=/home/nfs/u2023-zlb/FABE/Tuna/data/devign_fabe.json
+savedir=/home/nfs/share-yjy/dachuang2025/defense_model/tuna_starcoder7b_optimized
 
-# --- Best Practices: Define project paths clearly ---
-# Using a central project root makes the script more portable.
-PROJECT_ROOT="/home/nfs/u2023-zlb/FABE"
-
-# --- Model & Data Configuration ---
-MODEL_PATH="/home/nfs/share-yjy/local_llm/BigCode/starcoder2-7b"
-DATA_PATH="${PROJECT_ROOT}/Tuna/data/devign_fabe.json"
-OUTPUT_DIR="${PROJECT_ROOT}/checkpoints/starcoder2-7b-tuna-optimized"
-
-# Create output directory if it doesn't exist to prevent errors
-mkdir -p ${OUTPUT_DIR}
-
-# --- Core Training Hyperparameters ---
-# Increased batch size to better utilize 80GB VRAM.
-# The effective batch size is now 64 (8 * 8), which is much more stable.
-# You can experiment with increasing PER_DEVICE_TRAIN_BATCH_SIZE further to 12 or 16.
-# Find the maximum that fits in memory, then adjust GRADIENT_ACCUMULATION_STEPS accordingly.
+# --- 优化后的核心参数 ---
+# 增加单设备批次大小，减少梯度累积步骤，以提升速度
 PER_DEVICE_TRAIN_BATCH_SIZE=8
-GRADIENT_ACCUMULATION_STEPS=8
-NUM_TRAIN_EPOCHS=2
-# A more standard and effective learning rate for fine-tuning 7B models.
-LEARNING_RATE=2e-5
-# Using a ratio for warmup is more flexible than a fixed number of steps.
-WARMUP_RATIO=0.05
+GRADIENT_ACCUMULATION_STEPS=2
+# 假设你将使用 LoRA，大幅提高学习率
+LR=2e-4
+# -------------------------
 
-# --- Optimizer & Scheduler ---
-ADAM_BETA1=0.9
-# Using the standard, recommended value for Adam's beta2.
-ADAM_BETA2=0.999
-LR_SCHEDULER_TYPE="cosine"
+NUM_TRAIN_EPOCHS=3
+SAVE_STEPS=200
+# ... 其他参数保持不变 ...
+WARMUP_STEPS=100
+REMOVE_UNUSED_COLUMNS=False # 最好设置为True，除非你的脚本有特殊需求
 
-# --- Tuna-Specific Hyperparameters (from original script) ---
-NO_DISCRIMINATE=False
-LENPEN=1.0
-MLE_WEIGHT=1.0
-MARGIN=0.1
+cd ${root_dir}/Tuna/src
 
-# --- Logging & Saving ---
-SAVE_STEPS=500
-# It's good practice to save more than just the last checkpoint.
-SAVE_TOTAL_LIMIT=2
-LOGGING_STEPS=10
-
-# --- Execution ---
-cd "${PROJECT_ROOT}/Tuna/src"
-
-# The `deepspeed` command can sometimes offer better performance and memory management.
-# If you have it configured, you can use it. Otherwise, `python` is fine.
-# For now, we'll stick with the original python command.
-
-echo "Starting training..."
-python train_tuna.py \
-    --model_name_or_path "${MODEL_PATH}" \
-    --data_path "${DATA_PATH}" \
-    --output_dir "${OUTPUT_DIR}" \
-    \
-    --num_train_epochs ${NUM_TRAIN_EPOCHS} \
-    --per_device_train_batch_size ${PER_DEVICE_TRAIN_BATCH_SIZE} \
-    --per_device_eval_batch_size ${PER_DEVICE_TRAIN_BATCH_SIZE} \
-    --gradient_accumulation_steps ${GRADIENT_ACCUMULATION_STEPS} \
-    --learning_rate ${LEARNING_RATE} \
-    --lr_scheduler_type "${LR_SCHEDULER_TYPE}" \
-    --warmup_ratio ${WARMUP_RATIO} \
-    --adam_beta1 ${ADAM_BETA1} \
-    --adam_beta2 ${ADAM_BETA2} \
-    \
-    --no_discriminate ${NO_DISCRIMINATE} \
-    --lenpen ${LENPEN} \
-    --mle_weight ${MLE_WEIGHT} \
-    --margin ${MARGIN} \
-    \
+# 注意 --bf16 和 --optim 参数
+torchrun --nproc_per_node=1 train_tuna.py \
+    --model_name_or_path ${MODEL} \
+    --data_path $datadir \
+    --output_dir $savedir \
+    --num_train_epochs $NUM_TRAIN_EPOCHS \
+    --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
+    --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
     --save_strategy "steps" \
-    --save_steps ${SAVE_STEPS} \
-    --save_total_limit ${SAVE_TOTAL_LIMIT} \
-    --logging_steps ${LOGGING_STEPS} \
+    --save_steps $SAVE_STEPS \
+    --save_total_limit 2 \
+    --learning_rate $LR \
+    --warmup_steps $WARMUP_STEPS \
+    --logging_steps 10 \
+    --lr_scheduler_type "cosine" \
     --report_to "tensorboard" \
-    --log_level "info" \
-    \
-    --bf16 True \
-    --use_flash_attention_2 True \
     --gradient_checkpointing True \
-    --remove_unused_columns ${REMOVE_UNUSED_COLUMNS} 2>&1 | tee "${OUTPUT_DIR}/training.log"
-
-echo "Training finished."
+    --remove_unused_columns True \
+    --bf16 True \
+    --dataloader_num_workers 4 \
+    --max_grad_norm 1.0 \
+    --weight_decay 0.01 2>&1 | tee training_starcoder7b.log

@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=2
 
 # 训练参数配置
 MODEL_PATH="/home/nfs/share-yjy/dachuang2025/models/deepseek-coder-6.7b-instruct"
-TRAIN_DATA_PATH="../data/fabe_adapted/"
+TRAIN_DATA_PATH="../data/universal_format/"
 OUTPUT_DIR="/home/nfs/share-yjy/dachuang2025/defense_model/deepseek-coder-defense"
 LOG_DIR="logs/deepseek-coder"
 
@@ -21,28 +21,30 @@ torchrun \
     main.py \
     --task coding \
     --do_train \
+    --model_template deepseek \
     --model_name_or_path $MODEL_PATH \
     --train_file_path $TRAIN_DATA_PATH \
     --validation_file_path $TRAIN_DATA_PATH \
     --validation_file_name "train.jsonl" \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
-    --learning_rate 2e-5 \
+    --learning_rate 3e-5 \
     --block_size 2048 \
     --num_train_epochs 3 \
-    --gradient_accumulation_steps 2 \
+    --gradient_accumulation_steps 16 \
     --output_dir $OUTPUT_DIR \
     --log_path $LOG_DIR \
-    --checkpointing_step 100 \
+    --checkpointing_step 500 \
     --training_stage_num 4 \
     --sft_weight 1.5 \
     --use_lora \
-    --lora_r 64 \
-    --lora_alpha 128 \
+    --lora_r 32 \
+    --lora_alpha 64 \
     --lora_dropout 0.1 \
-    --lora_target_modules q_proj k_proj v_proj o_proj \
+    --lora_target_modules q_proj v_proj \
     --bf16 \
-    --seed 42
+    --seed 42 \
+
 
 # 训练状态检查
 if [ $? -eq 0 ]; then

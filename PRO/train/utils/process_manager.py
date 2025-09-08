@@ -7,12 +7,12 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from accelerate.logging import get_logger
-from .data_manager import HH_DataManager, Summarize_DataManager
-from .generic_data_manager import GenericDataManager
+from .data_manager import Coding_DataManager
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.modeling_auto import MODEL_MAPPING, AutoModelForCausalLM
+from transformers.utils.quantization_config import BitsAndBytesConfig
 from peft import get_peft_model, LoraConfig, TaskType
 args = init_args()
 if args.task == "hh":
@@ -35,32 +35,58 @@ class ProcessManager():
         # Set model config
         self.model_config = AutoConfig.from_pretrained(self.model_path)
         
-        # Set datamanager
-        if args.task == "hh":
-            self.data_manager = HH_DataManager(
+        # Set datamanager - 统一使用Coding_DataManager
+        if args.task == "coding":
+            self.data_manager = Coding_DataManager(
                 self.model_config,
                 args.training_stage_num,
+                task_type="coding"
+            )
+        elif args.task == "hh":
+            # 对于HH任务，也使用Coding_DataManager
+            self.data_manager = Coding_DataManager(
+                self.model_config,
+                args.training_stage_num,
+                tokenizer_path=model_path,
+                task_type="hh"
             )
         elif args.task == "summarize":
-            self.data_manager = Summarize_DataManager(
+            # 对于总结任务，也使用Coding_DataManager
+            self.data_manager = Coding_DataManager(
                 self.model_config,
                 args.training_stage_num,
+                tokenizer_path=model_path,
+                task_type="summarize"
             )
         else:
-            # 使用GenericDataManager支持其他任务
-            self.data_manager = GenericDataManager(
-                config=args,
-                training_stage=args.training_stage_num,
-                model_type="auto",  # 自动检测模型类型
-                task_type=args.task,
-                tokenizer_path=model_path
+            # 使用Coding_DataManager支持其他任务
+            self.data_manager = Coding_DataManager(
+                self.model_config,
+                args.training_stage_num,
+                tokenizer_path=model_path,
+                task_type=args.task
             )
         
-        # Load base model
+        # Load base model with optional quantization
+        load_kwargs = {
+            "config": self.model_config,
+            "torch_dtype": torch.bfloat16 if args.bf16 else (torch.float16 if args.fp16 else torch.float32)
+        }
+        
+        # Add 4-bit quantization if enabled
+        if hasattr(args, 'use_4bit') and args.use_4bit:
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type=getattr(args, 'bnb_4bit_quant_type', "nf4"),
+                bnb_4bit_compute_dtype=torch.bfloat16 if args.bf16 else torch.float16,
+                bnb_4bit_use_double_quant=getattr(args, 'bnb_4bit_use_double_quant', False)
+            )
+            load_kwargs["quantization_config"] = quantization_config
+            load_kwargs["device_map"] = "auto"
+        
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
-            config=self.model_config,
-            torch_dtype=torch.bfloat16 if args.bf16 else (torch.float16 if args.fp16 else torch.float32)
+            **load_kwargs
         )
         
         # Add LoRA if enabled
@@ -109,12 +135,26 @@ class ProcessManager():
             shift_masks = local_mask[..., :-1] #[batch, seq_len-1]
             shift_labels = local_labels[..., 1:].view(batch_size, -1, 1) #[batch, seq_len-1, 1]
 
-            selected_logits = torch.gather(input=shift_logits, dim=2, index=shift_labels).view(batch_size, -1) #[batch, seq_len-1]
-            selected_logits[shift_masks != 1] = 0.0 #[batch, seq_len-1]
+            # Handle -100 labels (ignore_index) to prevent CUDA errors
+            vocab_size = shift_logits.size(-1)
+            ignore_mask = (shift_labels == -100)
+            
+            # Replace -100 with 0 for gather operation (will be masked out later)
+            safe_labels = torch.where(ignore_mask, torch.zeros_like(shift_labels), shift_labels)
+            
+            # Clamp any remaining out-of-bounds labels to valid range
+            safe_labels = torch.clamp(safe_labels, 0, vocab_size - 1)
+
+            selected_logits = torch.gather(input=shift_logits, dim=2, index=safe_labels).view(batch_size, -1) #[batch, seq_len-1]
+            
+            # Apply both attention mask and ignore mask
+            ignore_mask_flat = ignore_mask.view(batch_size, -1)
+            combined_mask = (shift_masks == 1) & (~ignore_mask_flat)
+            selected_logits[~combined_mask] = 0.0 #[batch, seq_len-1]
             sentence_logits = torch.sum(selected_logits, dim=1) #[batch]
             sentence_logits = sentence_logits.view(batch_size, 1)
             score_list.append(sentence_logits)
-            suffix_mask_list.append(torch.sum(shift_masks, dim=1).view(batch_size, 1))
+            suffix_mask_list.append(torch.sum(combined_mask.float(), dim=1).view(batch_size, 1))
         
         sum_scores = torch.cat(score_list, dim=1) #[batch, training_stage]
         suffix_mask = torch.cat(suffix_mask_list, dim=1) #[batch, training_stage]
@@ -128,32 +168,51 @@ class ProcessManager():
             neg_temperatures = pos_reward.view(-1, 1) - neg_reward # [batch, training_stage-time-1]
             pos_temperature = torch.max(neg_temperatures, dim=1).values # [batch]
             loss = torch.log(eps + torch.exp(scores[:, time] * pos_temperature) + torch.sum(torch.exp(scores[:, time+1:] * neg_temperatures), dim=1)) - scores[:, time] * pos_temperature # [batch]
-            loss = torch.mean(loss).to(local_outputs.hidden_states[0].dtype)
+            loss = torch.mean(loss).to(scores.dtype)
             
             print_loss[time].append(loss.item())
             total_loss += loss
         
         sft_index = batch["sft_index"].view(batch_size, 1)
         sft_scores = torch.gather(input = sum_scores, dim = 1, index = sft_index).view(batch_size) #[batch]
-        sft_loss = torch.mean(-sft_scores).to(local_outputs.hidden_states[0].dtype)
+        sft_loss = torch.mean(-sft_scores).to(scores.dtype)
         sft_loss = args.sft_weight * math.pow(temp_training_stage - 1, 2) * sft_loss
         total_loss += sft_loss
 
         print_loss[-1].append(sft_loss.item())
         self.accelerator.backward(total_loss)
 
-    def prepare_hfa_dataloader(self, train_file_path=args.train_file_path, train_file_name = None):
-        # get dataloader
-        if train_file_name is None:
-            train_file_name = os.listdir(train_file_path)[0]
+    def prepare_hfa_dataloader(self, train_file_path=None, train_file_name=None):
+        # Use the file path from args if not provided
+        if train_file_path is None:
+            train_file_path = args.train_file_path
         
-        self.logger.info(f"Load training data from {os.path.join(train_file_path, train_file_name)}")
-        self.accelerator.print(f"Load training data from {os.path.join(train_file_path, train_file_name)}")
+        # Handle different path formats (string vs list vs glob pattern)
+        if isinstance(train_file_path, str):
+            if '*' in train_file_path:
+                # Glob pattern - use directly
+                data_file_path = train_file_path
+            elif os.path.isfile(train_file_path):
+                # Single file
+                data_file_path = train_file_path
+            elif os.path.isdir(train_file_path):
+                # Directory - need specific file name
+                if train_file_name is None:
+                    train_file_name = os.listdir(train_file_path)[0]
+                data_file_path = os.path.join(train_file_path, train_file_name)
+            else:
+                data_file_path = train_file_path
+        else:
+            # List of files
+            data_file_path = train_file_path
+        
+        self.logger.info(f"Load training data from {data_file_path}")
+        self.accelerator.print(f"Load training data from {data_file_path}")
         
         hfa_dataloader = self.data_manager.load_train_data(
-            data_file_path = train_file_path,
-            data_file_name = train_file_name,
-            data_collator = self.data_manager.train_data_collator
+            data_collator=self.data_manager.train_data_collator,
+            data_file_path=data_file_path,
+            data_file_name=train_file_name
         )
         
         # wrap with accelerator
@@ -164,16 +223,45 @@ class ProcessManager():
         return hfa_dataloader
 
     def init_prepare_train(self, train_file_name = None):
-        # get dataloader
-        train_files = os.listdir(args.train_file_path)
+        # 处理训练文件路径
+        train_file_path = args.train_file_path
         
-        if train_file_name == None:
-            train_file_name = train_files[0]
+        # 如果是列表且只有一个元素，取第一个元素
+        if isinstance(train_file_path, list) and len(train_file_path) == 1:
+            train_file_path = train_file_path[0]
         
-        # record raw dataset length
-        dataset_length = len(
-            open(os.path.join(args.train_file_path, train_file_name), 'r', encoding='utf-8').readlines()
-        )
+        # 如果是目录，获取文件列表
+        if isinstance(train_file_path, str) and os.path.isdir(train_file_path):
+            train_files = os.listdir(train_file_path)
+            if train_file_name == None:
+                train_file_name = train_files[0]
+            
+            # record raw dataset length
+            dataset_length = len(
+                open(os.path.join(train_file_path, train_file_name), 'r', encoding='utf-8').readlines()
+            )
+        else:
+            # 对于glob模式或直接文件路径，使用不同的方式获取长度
+            import glob
+            if isinstance(train_file_path, str) and '*' in train_file_path:
+                # Glob模式，获取匹配的文件列表
+                train_files = glob.glob(train_file_path)
+                if train_files:
+                    dataset_length = len(open(train_files[0], 'r', encoding='utf-8').readlines())
+                else:
+                    train_files = []  # 空列表
+                    dataset_length = 1000  # 默认值
+            elif isinstance(train_file_path, list):
+                # 如果是列表，直接使用
+                train_files = train_file_path
+                if train_files:
+                    dataset_length = len(open(train_files[0], 'r', encoding='utf-8').readlines())
+                else:
+                    dataset_length = 1000
+            else:
+                # 单个文件
+                train_files = [train_file_path] if train_file_path else []
+                dataset_length = 1000  # 默认值
 
         # get the placeholder dataloader
         placeholder_dataloader = self.data_manager.load_train_data(
@@ -210,9 +298,33 @@ class ProcessManager():
         return model, optimizer, dataset_length
 
     def train(self):
-        train_files = os.listdir(args.train_file_path)
-        model, optimizer, dataset_length = self.init_prepare_train(
+        # 使用更好的文件路径处理逻辑
+        train_file_path = args.train_file_path
+        
+        # 如果是列表且只有一个元素，取第一个元素
+        if isinstance(train_file_path, list) and len(train_file_path) == 1:
+            train_file_path = train_file_path[0]
+        
+        # 初始化train_files变量
+        train_files = []
+        
+        # 如果是目录，获取文件列表
+        if isinstance(train_file_path, str) and os.path.isdir(train_file_path):
+            train_files = os.listdir(train_file_path)
             train_file_name = train_files[0]
+        else:
+            # 对于glob模式或列表，获取匹配的文件
+            import glob
+            if isinstance(train_file_path, str) and '*' in train_file_path:
+                train_files = glob.glob(train_file_path)
+            elif isinstance(train_file_path, list):
+                train_files = train_file_path
+            else:
+                train_files = [train_file_path] if train_file_path else []
+            train_file_name = None
+            
+        model, optimizer, dataset_length = self.init_prepare_train(
+            train_file_name = train_file_name
         )
         training_stage = args.training_stage_num
         if self.accelerator.is_main_process:
@@ -392,8 +504,19 @@ class ProcessManager():
             if len(infer_data)-sample_index < infer_batch_size:
                 infer_batch_size = len(infer_data)-sample_index
 
-            prefixes = [l['prefix'][0] for l in infer_data[sample_index:sample_index+infer_batch_size]]
-            suffixes = self.data_manager.infer_generate(model, prefixes)
+            # Extract instructions and inputs for inference
+            batch_data = infer_data[sample_index:sample_index+infer_batch_size]
+            if 'instruction' in batch_data[0] and 'input' in batch_data[0]:
+                # New format with instruction/input
+                instructions = [l.get('instruction', '') for l in batch_data]
+                inputs = [l.get('input', '') for l in batch_data]
+                suffixes = self.data_manager.infer_generate(model, instructions, inputs)
+            else:
+                # Legacy format with prefix - convert to instruction/input format
+                prefixes = [l['prefix'][0] for l in batch_data]
+                instructions = prefixes
+                inputs = [''] * len(prefixes)
+                suffixes = self.data_manager.infer_generate(model, instructions, inputs)
             for l, s in zip(infer_data[sample_index:sample_index+infer_batch_size], suffixes):
                 l['infer'] = {"t": s}
             infer_bar.update(infer_batch_size)
@@ -418,5 +541,38 @@ class ProcessManager():
                     is_main_process=self.accelerator.is_main_process,
                     save_function=self.accelerator.save,
                 )
+            
+            # 实现save_total_limit功能
+            if hasattr(args, 'save_total_limit') and args.save_total_limit > 0:
+                self._cleanup_checkpoints(args.output_dir, args.save_total_limit)
         else:
             self.logger.error('No save path!', main_process_only=True)
+
+    def _cleanup_checkpoints(self, output_dir, save_total_limit):
+        """清理超过限制数量的checkpoint"""
+        import glob
+        import shutil
+        
+        # 获取所有step_*和epoch_*目录
+        step_checkpoints = glob.glob(os.path.join(output_dir, 'step_*'))
+        epoch_checkpoints = glob.glob(os.path.join(output_dir, 'epoch_*'))
+        
+        # 过滤掉符号链接和非目录文件
+        step_checkpoints = [cp for cp in step_checkpoints if os.path.isdir(cp) and not os.path.islink(cp)]
+        epoch_checkpoints = [cp for cp in epoch_checkpoints if os.path.isdir(cp) and not os.path.islink(cp)]
+        
+        # 按修改时间排序，最新的在前
+        step_checkpoints.sort(key=os.path.getmtime, reverse=True)
+        epoch_checkpoints.sort(key=os.path.getmtime, reverse=True)
+        
+        # 删除超过限制的step checkpoints
+        if len(step_checkpoints) > save_total_limit:
+            for checkpoint_to_remove in step_checkpoints[save_total_limit:]:
+                self.logger.info(f"Removing old checkpoint: {checkpoint_to_remove}")
+                shutil.rmtree(checkpoint_to_remove)
+        
+        # 删除超过限制的epoch checkpoints  
+        if len(epoch_checkpoints) > save_total_limit:
+            for checkpoint_to_remove in epoch_checkpoints[save_total_limit:]:
+                self.logger.info(f"Removing old checkpoint: {checkpoint_to_remove}")
+                shutil.rmtree(checkpoint_to_remove)

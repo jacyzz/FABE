@@ -102,6 +102,12 @@ def parse_args():
         default=600,
     )
     parser.add_argument(
+        "--save_total_limit",
+        type=int,
+        default=2,
+        help="Limit the total amount of checkpoints. Deletes the older checkpoints."
+    )
+    parser.add_argument(
         "--log_path",
         type=str,
         default="logs",

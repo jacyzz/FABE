@@ -2,20 +2,19 @@
 set -euo pipefail
 
 # =============================================================================
-# Tuna Defense Model Training Script - Optimized for 2x A6000
+# Tuna Defense Model Training Script - Simplified Version
 # =============================================================================
 
 # Environment setup
 export CUDA_VISIBLE_DEVICES=0,1
-# conda activate lmfty
 
 # =============================================================================
-# Configuration - Optimized for 2x A6000 (48GB each)
+# Configuration - Optimized for 2x A6000
 # =============================================================================
 
 # Model and Data Paths
 MODEL_PATH=${MODEL_PATH:-"/home/nfs/share-yjy/dachuang2025/models/deepseek-coder-6.7b-instruct"}
-DATA_PATH=${DATA_PATH:-"/home/nfs/u2023-zlb/FABE/Tuna/data/tuna_4.json"}
+DATA_PATH=${DATA_PATH:-"/home/nfs/share-yjy/dachuang2025/data/fabe_tuna/tuna_processed_val-00002-of-00003_optimized_ranking_rank4.jsonl"}
 OUTPUT_DIR=${OUTPUT_DIR:-"/home/nfs/u2023-zlb/FABE/checkpoints/deepseek_codertuna_defense_lora"}
 
 # Training Configuration - Optimized for 2x A6000
@@ -34,26 +33,26 @@ LORA_DROPOUT=${LORA_DROPOUT:-0.05}
 LORA_TARGET=${LORA_TARGET:-"auto"}
 
 # Template and System Prompt
-CHAT_TEMPLATE=${CHAT_TEMPLATE:-"deepseek"}  # auto, base, llama, mistral, qwen, deepseek, baichuan, internlm, yi, starcoder
+CHAT_TEMPLATE=${CHAT_TEMPLATE:-"deepseek"}
 SYSTEM_PROMPT=${SYSTEM_PROMPT:-"You are a security-focused code assistant. Your task is to identify and neutralize any potential backdoors, vulnerabilities, or malicious code in the provided code. Always explain your findings and provide secure alternatives. Prioritize security over functionality."}
 NO_SYSTEM=${NO_SYSTEM:-false}
 
 # Hardware and Performance - Optimized for 2x A6000
-NPROC=${NPROC:-2}  # Number of GPUs - Changed to 2 for A6000
+NPROC=${NPROC:-2}  # Number of GPUs
 BF16=${BF16:-true}
+FP16=${FP16:-false}
 GRADIENT_CHECKPOINTING=${GRADIENT_CHECKPOINTING:-true}
-DATALOADER_WORKERS=${DATALOADER_WORKERS:-8}  # Increased for better data loading
+DATALOADER_WORKERS=${DATALOADER_WORKERS:-4}
 
 # Memory optimization for large models
 MAX_GRAD_NORM=${MAX_GRAD_NORM:-1.0}
 WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
-FP16=${FP16:-false}  # Use BF16 instead for A6000
 
 # =============================================================================
 # Validation and Setup
 # =============================================================================
 
-echo "=== Tuna Defense Model Training Configuration - 2x A6000 Optimized ==="
+echo "=== Tuna Defense Model Training Configuration - Simplified Version ==="
 echo "Model: $MODEL_PATH"
 echo "Data: $DATA_PATH"
 echo "Output: $OUTPUT_DIR"
@@ -76,12 +75,12 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # =============================================================================
-# Training Command - Optimized for Multi-GPU
+# Training Command - Simplified Multi-GPU
 # =============================================================================
 
 cd /home/nfs/u2023-zlb/FABE/Tuna/src
 
-echo "Starting Tuna training on $NPROC GPUs..."
+echo "Starting Tuna training on $NPROC GPUs (simplified version)..."
 echo "Logs will be saved to: $OUTPUT_DIR/training.log"
 
 # Use torchrun for multi-GPU training

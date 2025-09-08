@@ -2,73 +2,91 @@
 set -euo pipefail
 
 # =============================================================================
-# Tuna Defense Model Training Script - Optimized for 2x A6000
+# Tuna Defense Model Training Script - Using Converted JSON Data
 # =============================================================================
 
 # Environment setup
 export CUDA_VISIBLE_DEVICES=0,1
-# conda activate lmfty
 
 # =============================================================================
-# Configuration - Optimized for 2x A6000 (48GB each)
+# Configuration - Using Converted JSON Data
 # =============================================================================
 
 # Model and Data Paths
 MODEL_PATH=${MODEL_PATH:-"/home/nfs/share-yjy/dachuang2025/models/deepseek-coder-6.7b-instruct"}
-DATA_PATH=${DATA_PATH:-"/home/nfs/u2023-zlb/FABE/Tuna/data/tuna_4.json"}
-OUTPUT_DIR=${OUTPUT_DIR:-"/home/nfs/u2023-zlb/FABE/checkpoints/deepseek_codertuna_defense_lora"}
 
-# Training Configuration - Optimized for 2x A6000
+# 使用转换后的JSON文件
+ORIGINAL_JSONL="/home/nfs/share-yjy/dachuang2025/data/fabe_tuna/tuna_processed_val-00002-of-00003_optimized_ranking_rank4.jsonl"
+CONVERTED_JSON="/home/nfs/u2023-zlb/FABE/Tuna/tuna_processed_val-00002-of-00003_optimized_ranking_rank4.json"
+
+# 检查转换后的JSON文件是否存在，如果不存在则自动转换
+if [[ ! -f "$CONVERTED_JSON" ]]; then
+    echo "转换后的JSON文件不存在，正在自动转换..."
+    cd /home/nfs/u2023-zlb/FABE/Tuna/
+    python convert_jsonl_to_json.py "$ORIGINAL_JSONL" "$CONVERTED_JSON"
+    if [[ $? -ne 0 ]]; then
+        echo "❌ 自动转换失败，请手动运行转换脚本"
+        exit 1
+    fi
+    echo "✅ 自动转换完成"
+fi
+
+DATA_PATH=${DATA_PATH:-"$CONVERTED_JSON"}
+OUTPUT_DIR=${OUTPUT_DIR:-"/home/nfs/u2023-zlb/FABE/checkpoints/deepseek_codertuna_defense_lora_json"}
+
+# Training Configuration - Conservative
 NUM_EPOCHS=${NUM_EPOCHS:-3}
-BATCH_SIZE=${BATCH_SIZE:-2}  # Reduced from 4 to 2 per device
-GRAD_ACCUM_STEPS=${GRAD_ACCUM_STEPS:-16}  # Increased from 8 to 16 for effective batch size
-LEARNING_RATE=${LEARNING_RATE:-2e-4}
-WARMUP_STEPS=${WARMUP_STEPS:-100}
+BATCH_SIZE=${BATCH_SIZE:-2}
+GRAD_ACCUM_STEPS=${GRAD_ACCUM_STEPS:-8}
+LEARNING_RATE=${LEARNING_RATE:-2e-5}
+WARMUP_RATIO=${WARMUP_RATIO:-0.03}
 SAVE_STEPS=${SAVE_STEPS:-200}
 
-# LoRA Configuration
-PEFT_TYPE=${PEFT_TYPE:-"lora"}  # lora or qlora
+# LoRA Configuration - Conservative
+PEFT_TYPE=${PEFT_TYPE:-"lora"}
 LORA_R=${LORA_R:-16}
 LORA_ALPHA=${LORA_ALPHA:-32}
 LORA_DROPOUT=${LORA_DROPOUT:-0.05}
-LORA_TARGET=${LORA_TARGET:-"auto"}
+LORA_TARGET=${LORA_TARGET:-"q_proj,k_proj,v_proj,o_proj"}
 
 # Template and System Prompt
-CHAT_TEMPLATE=${CHAT_TEMPLATE:-"deepseek"}  # auto, base, llama, mistral, qwen, deepseek, baichuan, internlm, yi, starcoder
+CHAT_TEMPLATE=${CHAT_TEMPLATE:-"deepseek"}
 SYSTEM_PROMPT=${SYSTEM_PROMPT:-"You are a security-focused code assistant. Your task is to identify and neutralize any potential backdoors, vulnerabilities, or malicious code in the provided code. Always explain your findings and provide secure alternatives. Prioritize security over functionality."}
 NO_SYSTEM=${NO_SYSTEM:-false}
 
-# Hardware and Performance - Optimized for 2x A6000
-NPROC=${NPROC:-2}  # Number of GPUs - Changed to 2 for A6000
+# Hardware and Performance
 BF16=${BF16:-true}
 GRADIENT_CHECKPOINTING=${GRADIENT_CHECKPOINTING:-true}
-DATALOADER_WORKERS=${DATALOADER_WORKERS:-8}  # Increased for better data loading
+DATALOADER_WORKERS=${DATALOADER_WORKERS:-4}
 
-# Memory optimization for large models
-MAX_GRAD_NORM=${MAX_GRAD_NORM:-1.0}
-WEIGHT_DECAY=${WEIGHT_DECAY:-0.01}
-FP16=${FP16:-false}  # Use BF16 instead for A6000
+# Tuna specific parameters
+NO_DISCRIMINATE=${NO_DISCRIMINATE:-false}
+LENPEN=${LENPEN:-1.0}
+MLE_WEIGHT=${MLE_WEIGHT:-1.0}
+MARGIN=${MARGIN:-0.1}
 
 # =============================================================================
 # Validation and Setup
 # =============================================================================
 
-echo "=== Tuna Defense Model Training Configuration - 2x A6000 Optimized ==="
+echo "=== Tuna Defense Model Training Configuration - Using JSON Data ==="
 echo "Model: $MODEL_PATH"
-echo "Data: $DATA_PATH"
+echo "Original JSONL: $ORIGINAL_JSONL"
+echo "Converted JSON: $DATA_PATH"
 echo "Output: $OUTPUT_DIR"
 echo "PEFT: $PEFT_TYPE (r=$LORA_R, alpha=$LORA_ALPHA, dropout=$LORA_DROPOUT)"
+echo "Target modules: $LORA_TARGET"
 echo "Template: $CHAT_TEMPLATE"
-echo "System Prompt: $SYSTEM_PROMPT"
-echo "Batch Size: $BATCH_SIZE per device (accum=$GRAD_ACCUM_STEPS, effective=$((BATCH_SIZE * GRAD_ACCUM_STEPS * NPROC)))"
+echo "Batch Size: $BATCH_SIZE per device (accum=$GRAD_ACCUM_STEPS, effective=$((BATCH_SIZE * GRAD_ACCUM_STEPS * 2)))"
 echo "Learning Rate: $LEARNING_RATE"
 echo "Epochs: $NUM_EPOCHS"
-echo "GPUs: $NPROC"
+echo "GPUs: 2"
 echo "================================================"
 
 # Check if data file exists
 if [[ ! -f "$DATA_PATH" ]]; then
-    echo "Error: Data file not found: $DATA_PATH"
+    echo "❌ 错误: 数据文件不存在: $DATA_PATH"
+    echo "请先运行转换脚本: python convert_jsonl_to_json.py <input.jsonl>"
     exit 1
 fi
 
@@ -76,18 +94,17 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # =============================================================================
-# Training Command - Optimized for Multi-GPU
+# Training Command - Using DeepSpeed
 # =============================================================================
 
 cd /home/nfs/u2023-zlb/FABE/Tuna/src
 
-echo "Starting Tuna training on $NPROC GPUs..."
+echo "Starting Tuna training with converted JSON data..."
 echo "Logs will be saved to: $OUTPUT_DIR/training.log"
 
-# Use torchrun for multi-GPU training
-torchrun --nproc_per_node=$NPROC \
-    --master_port=29500 \
-    train_tuna.py \
+# Use DeepSpeed for training
+deepspeed --include localhost:0,1 train_tuna.py \
+    \
     --model_name_or_path "$MODEL_PATH" \
     --data_path "$DATA_PATH" \
     --output_dir "$OUTPUT_DIR" \
@@ -102,35 +119,28 @@ torchrun --nproc_per_node=$NPROC \
     --system_prompt "$SYSTEM_PROMPT" \
     ${NO_SYSTEM:+--no_system} \
     \
-    --num_train_epochs $NUM_EPOCHS \
-    --per_device_train_batch_size $BATCH_SIZE \
-    --gradient_accumulation_steps $GRAD_ACCUM_STEPS \
-    --learning_rate $LEARNING_RATE \
+    --num_train_epochs ${NUM_EPOCHS} \
+    --per_device_train_batch_size ${BATCH_SIZE} \
+    --gradient_accumulation_steps ${GRAD_ACCUM_STEPS} \
+    --learning_rate ${LEARNING_RATE} \
+    --warmup_ratio ${WARMUP_RATIO} \
     --lr_scheduler_type "cosine" \
-    --warmup_steps $WARMUP_STEPS \
     \
     --save_strategy "steps" \
-    --save_steps $SAVE_STEPS \
+    --save_steps ${SAVE_STEPS} \
     --save_total_limit 3 \
-    \
-    --gradient_checkpointing $GRADIENT_CHECKPOINTING \
-    --bf16 $BF16 \
-    --fp16 $FP16 \
-    --dataloader_num_workers $DATALOADER_WORKERS \
-    --max_grad_norm $MAX_GRAD_NORM \
-    --weight_decay $WEIGHT_DECAY \
-    \
     --logging_steps 10 \
     --report_to "tensorboard" \
-    --remove_unused_columns true \
+    --gradient_checkpointing ${GRADIENT_CHECKPOINTING} \
+    --log_level "info" \
     \
-    --mle_weight 1.0 \
-    --margin 0.1 \
-    --no_discriminate false \
-    --lenpen 1.0 \
+    --bf16 ${BF16} \
+    --remove_unused_columns false \
     \
-    --ddp_backend "nccl" \
-    --ddp_find_unused_parameters false \
+    --no_discriminate ${NO_DISCRIMINATE} \
+    --lenpen ${LENPEN} \
+    --mle_weight ${MLE_WEIGHT} \
+    --margin ${MARGIN} \
     2>&1 | tee "$OUTPUT_DIR/training.log"
 
 echo "Training completed!"

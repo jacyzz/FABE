@@ -30,6 +30,7 @@ from torch.utils.data import DataLoader, Dataset, DistributedSampler
 import torch.distributed as dist
 import utils
 from custom import TunaTrainer
+import json
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
@@ -231,7 +232,25 @@ class SupervisedDataset(Dataset):
     def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer, model_name_or_path: str, cfg: AutoConfig, data_args: DataArguments):
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
-        list_data_dict = utils.jload(data_path)
+        
+        # 修复：正确处理JSONL格式
+        if data_path.endswith('.jsonl'):
+            # 处理JSONL格式（每行一个JSON对象）
+            list_data_dict = []
+            with open(data_path, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f):
+                    line = line.strip()
+                    if line:  # 跳过空行
+                        try:
+                            data = json.loads(line)
+                            list_data_dict.append(data)
+                        except json.JSONDecodeError as e:
+                            logging.warning(f"跳过第{line_num+1}行，JSON解析错误: {e}")
+                            continue
+            logging.warning(f"从JSONL文件加载了 {len(list_data_dict)} 个样本")
+        else:
+            # 处理标准JSON格式
+            list_data_dict = utils.jload(data_path)
 
         logging.warning("Formatting inputs...")
 
@@ -305,10 +324,23 @@ def _tokenize(
     for i, l in enumerate(length):
         labels[i][:, :l] = IGNORE_INDEX
 
+    # 确保scores是tensor格式
+    if isinstance(scores[0], (list, tuple)):
+        # 如果scores是嵌套列表，展平它
+        flattened_scores = []
+        for score_list in scores:
+            if isinstance(score_list, (list, tuple)):
+                flattened_scores.extend(score_list)
+            else:
+                flattened_scores.append(score_list)
+        scores_tensor = torch.tensor(flattened_scores, dtype=torch.float32)
+    else:
+        scores_tensor = torch.tensor(scores, dtype=torch.float32)
+
     return dict(
         input_ids=input_ids,
         labels=labels,
-        scores=torch.tensor(scores),
+        scores=scores_tensor,
     )
 
 
@@ -390,6 +422,11 @@ def tokenize_function(examples, tokenizer, model_name_or_path: str, cfg: AutoCon
     scores_sorted = [[s[1] for s in ss] for ss in ss_sorted]
 
     data_dict = _tokenize(sources_sorted, scores_sorted, instruction_prefixes, tokenizer)
+    
+    # 确保返回的数据包含正确的字段名
+    if "scores" not in data_dict and "score" in data_dict:
+        data_dict["scores"] = data_dict.pop("score")
+    
     return data_dict
 
 
@@ -400,6 +437,25 @@ class DataCollatorForSupervisedDataset(object):
     tokenizer: transformers.PreTrainedTokenizer
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
+        # 检查数据中是否包含必要的字段
+        required_keys = ["input_ids", "labels", "scores"]
+        missing_keys = []
+        
+        for key in required_keys:
+            if not all(key in instance for instance in instances):
+                missing_keys.append(key)
+        
+        if missing_keys:
+            # 尝试从 "score" 字段获取 "scores"
+            if "scores" in missing_keys and all("score" in instance for instance in instances):
+                for instance in instances:
+                    if "score" in instance and "scores" not in instance:
+                        instance["scores"] = instance["score"]
+                missing_keys.remove("scores")
+            
+            if missing_keys:
+                raise KeyError(f"Missing required keys in data: {missing_keys}. Available keys: {list(instances[0].keys()) if instances else 'No instances'}")
+        
         input_ids, labels, scores = tuple(
             [instance[key] for instance in instances]
             for key in ("input_ids", "labels", "scores")
@@ -506,6 +562,8 @@ def train():
 
     if model_args.peft.lower() in ["lora", "qlora"]:
         target_modules = _infer_lora_target_modules(config, model_args.model_name_or_path)
+        print(f"LoRA target modules: {target_modules}")
+        
         lora_cfg = LoraConfig(
             r=model_args.lora_r,
             lora_alpha=model_args.lora_alpha,
@@ -514,33 +572,67 @@ def train():
             bias="none",
             task_type="CAUSAL_LM",
         )
+        print(f"LoRA config: {lora_cfg}")
+        
         model = get_peft_model(model, lora_cfg)
+        
+        # 确保LoRA参数可训练
+        model.print_trainable_parameters()
+        
+        # 检查模型是否真的变成了PeftModel
+        if hasattr(model, 'is_peft_model'):
+            print(f"Model is PEFT model: {model.is_peft_model}")
+        else:
+            print("Warning: Model may not be properly converted to PEFT model")
+        
+        # 确保所有LoRA参数都是可训练的
+        trainable_params = 0
+        all_param = 0
+        for _, param in model.named_parameters():
+            all_param += param.numel()
+            if param.requires_grad:
+                trainable_params += param.numel()
+        print(f"trainable params: {trainable_params:,} || all params: {all_param:,} || trainable%: {100 * trainable_params / all_param:.2f}%")
 
-    raw_dataset = load_dataset("json", data_files=data_args.data_path, split="train")
-    generation_dataset = raw_dataset.map(
-        tokenize_function,
-        fn_kwargs={
-            "tokenizer": tokenizer,
-            "model_name_or_path": model_args.model_name_or_path,
-            "cfg": config,
-            "data_args": data_args,
-        },
-        batched=True,
-        batch_size=30,
-        num_proc=32,
-        remove_columns=raw_dataset.column_names,
-        desc="Running tokenizer on dataset",
+    # 直接使用SupervisedDataset，避免复杂的HuggingFace数据处理
+    print("Loading dataset using SupervisedDataset...")
+    train_dataset = SupervisedDataset(
+        tokenizer=tokenizer, 
+        data_path=data_args.data_path, 
+        model_name_or_path=model_args.model_name_or_path, 
+        cfg=config, 
+        data_args=data_args
     )
+    
     collator = DataCollatorForSupervisedDataset(tokenizer)
-    # Tell Trainer not to attempt DataParallel
+    
+    # 确保模型配置正确
+    print("Model configuration check:")
+    print(f"  Model type: {type(model)}")
+    print(f"  Is PEFT model: {isinstance(model, PeftModel)}")
+    print(f"  Gradient checkpointing: {training_args.gradient_checkpointing}")
+    
+    # 设置模型属性
     model.is_parallelizable = True
     model.model_parallel = True
+    
+    # 确保梯度检查点正确配置
+    if training_args.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
+        print("  Gradient checkpointing enabled")
+    
+    # 确保所有LoRA参数都是可训练的
+    print("Parameter training status:")
+    for name, param in model.named_parameters():
+        if "lora" in name.lower():
+            print(f"  {name}: requires_grad={param.requires_grad}, shape={param.shape}")
+    
     print(f"training_args = {training_args}")
     trainer = TunaTrainer(
         model=model,
         tokenizer=tokenizer,
         args=training_args,
-        train_dataset=generation_dataset,
+        train_dataset=train_dataset,
         data_collator=collator,
     )
     model.config.use_cache = False

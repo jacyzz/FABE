@@ -187,24 +187,41 @@ class ProcessManager():
         if train_file_path is None:
             train_file_path = args.train_file_path
         
-        # Handle different path formats (string vs list vs glob pattern)
+        # Handle different path formats based on user requirements:
+        # 1. Directory -> load all .json/.jsonl files in the directory
+        # 2. Single file -> load only that file
+        # 3. Glob pattern -> load all matching files
+        
         if isinstance(train_file_path, str):
-            if '*' in train_file_path:
-                # Glob pattern - use directly
-                data_file_path = train_file_path
+            if os.path.isdir(train_file_path):
+                # Directory: load all .json/.jsonl files
+                import glob
+                json_files = glob.glob(os.path.join(train_file_path, "*.json"))
+                jsonl_files = glob.glob(os.path.join(train_file_path, "*.jsonl"))
+                data_file_path = json_files + jsonl_files
+                if not data_file_path:
+                    raise ValueError(f"No .json or .jsonl files found in directory: {train_file_path}")
+                self.logger.info(f"Directory mode: Loading {len(data_file_path)} files from {train_file_path}")
             elif os.path.isfile(train_file_path):
-                # Single file
+                # Single file: load only this file
+                if not (train_file_path.endswith('.json') or train_file_path.endswith('.jsonl')):
+                    self.logger.warning(f"File extension may not be supported: {train_file_path}")
                 data_file_path = train_file_path
-            elif os.path.isdir(train_file_path):
-                # Directory - need specific file name
-                if train_file_name is None:
-                    train_file_name = os.listdir(train_file_path)[0]
-                data_file_path = os.path.join(train_file_path, train_file_name)
+                self.logger.info(f"Single file mode: Loading {train_file_path}")
+            elif '*' in train_file_path:
+                # Glob pattern: load all matching files
+                data_file_path = train_file_path
+                self.logger.info(f"Glob pattern mode: Loading files matching {train_file_path}")
             else:
+                # Path doesn't exist - assume it will be created or is valid
                 data_file_path = train_file_path
-        else:
-            # List of files
+                self.logger.warning(f"Path not found, using as-is: {train_file_path}")
+        elif isinstance(train_file_path, list):
+            # List of files (for backward compatibility)
             data_file_path = train_file_path
+            self.logger.info(f"List mode: Loading {len(data_file_path)} files")
+        else:
+            raise ValueError(f"Invalid train_file_path type: {type(train_file_path)}")
         
         self.logger.info(f"Load training data from {data_file_path}")
         self.accelerator.print(f"Load training data from {data_file_path}")
@@ -223,45 +240,64 @@ class ProcessManager():
         return hfa_dataloader
 
     def init_prepare_train(self, train_file_name = None):
-        # 处理训练文件路径
+        # 处理训练文件路径 - 使用与 prepare_hfa_dataloader 相同的逻辑
         train_file_path = args.train_file_path
         
-        # 如果是列表且只有一个元素，取第一个元素
-        if isinstance(train_file_path, list) and len(train_file_path) == 1:
-            train_file_path = train_file_path[0]
-        
-        # 如果是目录，获取文件列表
-        if isinstance(train_file_path, str) and os.path.isdir(train_file_path):
-            train_files = os.listdir(train_file_path)
-            if train_file_name == None:
-                train_file_name = train_files[0]
-            
-            # record raw dataset length
-            dataset_length = len(
-                open(os.path.join(train_file_path, train_file_name), 'r', encoding='utf-8').readlines()
-            )
-        else:
-            # 对于glob模式或直接文件路径，使用不同的方式获取长度
-            import glob
-            if isinstance(train_file_path, str) and '*' in train_file_path:
-                # Glob模式，获取匹配的文件列表
+        # 根据路径类型确定训练文件列表和数据长度
+        if isinstance(train_file_path, str):
+            if os.path.isdir(train_file_path):
+                # 目录：获取所有 .json/.jsonl 文件
+                import glob
+                json_files = glob.glob(os.path.join(train_file_path, "*.json"))
+                jsonl_files = glob.glob(os.path.join(train_file_path, "*.jsonl"))
+                train_files = json_files + jsonl_files
+                if not train_files:
+                    raise ValueError(f"No .json or .jsonl files found in directory: {train_file_path}")
+                # 使用第一个文件来估算数据长度
+                try:
+                    with open(train_files[0], 'r', encoding='utf-8') as f:
+                        dataset_length = sum(1 for _ in f)
+                except:
+                    dataset_length = 1000  # 默认值
+            elif os.path.isfile(train_file_path):
+                # 单个文件
+                train_files = [train_file_path]
+                try:
+                    with open(train_file_path, 'r', encoding='utf-8') as f:
+                        dataset_length = sum(1 for _ in f)
+                except:
+                    dataset_length = 1000
+            elif '*' in train_file_path:
+                # Glob模式
+                import glob
                 train_files = glob.glob(train_file_path)
                 if train_files:
-                    dataset_length = len(open(train_files[0], 'r', encoding='utf-8').readlines())
+                    try:
+                        with open(train_files[0], 'r', encoding='utf-8') as f:
+                            dataset_length = sum(1 for _ in f)
+                    except:
+                        dataset_length = 1000
                 else:
-                    train_files = []  # 空列表
-                    dataset_length = 1000  # 默认值
-            elif isinstance(train_file_path, list):
-                # 如果是列表，直接使用
-                train_files = train_file_path
-                if train_files:
-                    dataset_length = len(open(train_files[0], 'r', encoding='utf-8').readlines())
-                else:
+                    train_files = []
                     dataset_length = 1000
             else:
-                # 单个文件
-                train_files = [train_file_path] if train_file_path else []
-                dataset_length = 1000  # 默认值
+                # 假设是有效路径
+                train_files = [train_file_path]
+                dataset_length = 1000
+        elif isinstance(train_file_path, list):
+            # 文件列表（向后兼容）
+            train_files = train_file_path
+            if train_files:
+                try:
+                    with open(train_files[0], 'r', encoding='utf-8') as f:
+                        dataset_length = sum(1 for _ in f)
+                except:
+                    dataset_length = 1000
+            else:
+                dataset_length = 1000
+        else:
+            train_files = []
+            dataset_length = 1000
 
         # get the placeholder dataloader
         placeholder_dataloader = self.data_manager.load_train_data(
@@ -298,30 +334,36 @@ class ProcessManager():
         return model, optimizer, dataset_length
 
     def train(self):
-        # 使用更好的文件路径处理逻辑
+        # 使用与 prepare_hfa_dataloader 和 init_prepare_train 相同的逻辑
         train_file_path = args.train_file_path
         
-        # 如果是列表且只有一个元素，取第一个元素
-        if isinstance(train_file_path, list) and len(train_file_path) == 1:
-            train_file_path = train_file_path[0]
-        
-        # 初始化train_files变量
-        train_files = []
-        
-        # 如果是目录，获取文件列表
-        if isinstance(train_file_path, str) and os.path.isdir(train_file_path):
-            train_files = os.listdir(train_file_path)
-            train_file_name = train_files[0]
-        else:
-            # 对于glob模式或列表，获取匹配的文件
-            import glob
-            if isinstance(train_file_path, str) and '*' in train_file_path:
+        # 根据路径类型确定训练文件列表
+        if isinstance(train_file_path, str):
+            if os.path.isdir(train_file_path):
+                # 目录：获取所有 .json/.jsonl 文件
+                import glob
+                json_files = glob.glob(os.path.join(train_file_path, "*.json"))
+                jsonl_files = glob.glob(os.path.join(train_file_path, "*.jsonl"))
+                train_files = json_files + jsonl_files
+                if not train_files:
+                    raise ValueError(f"No .json or .jsonl files found in directory: {train_file_path}")
+            elif os.path.isfile(train_file_path):
+                # 单个文件
+                train_files = [train_file_path]
+            elif '*' in train_file_path:
+                # Glob模式
+                import glob
                 train_files = glob.glob(train_file_path)
-            elif isinstance(train_file_path, list):
-                train_files = train_file_path
             else:
+                # 假设是有效路径
                 train_files = [train_file_path] if train_file_path else []
-            train_file_name = None
+        elif isinstance(train_file_path, list):
+            # 文件列表（向后兼容）
+            train_files = train_file_path
+        else:
+            train_files = []
+        
+        train_file_name = None  # 不再需要单独的 train_file_name
             
         model, optimizer, dataset_length = self.init_prepare_train(
             train_file_name = train_file_name
@@ -483,7 +525,48 @@ class ProcessManager():
         infer_file_path = infer_file_path or args.validation_file_path
         infer_file_name = infer_file_name or args.validation_file_name
 
-        with open(os.path.join(infer_file_path, infer_file_name), "r", encoding='utf-8') as f:
+        # 处理新的文件路径格式 - 与训练数据处理逻辑一致
+        actual_file_path = None
+        if isinstance(infer_file_path, str):
+            if os.path.isfile(infer_file_path):
+                # 直接是文件路径
+                actual_file_path = infer_file_path
+                infer_file_name = os.path.basename(infer_file_path)
+            elif os.path.isdir(infer_file_path):
+                # 是目录，需要结合 infer_file_name
+                if infer_file_name:
+                    actual_file_path = os.path.join(infer_file_path, infer_file_name)
+                else:
+                    # 没有指定文件名，找第一个 .json/.jsonl 文件
+                    import glob
+                    json_files = glob.glob(os.path.join(infer_file_path, "*.json"))
+                    jsonl_files = glob.glob(os.path.join(infer_file_path, "*.jsonl"))
+                    all_files = json_files + jsonl_files
+                    if all_files:
+                        actual_file_path = all_files[0]
+                        infer_file_name = os.path.basename(actual_file_path)
+                    else:
+                        raise ValueError(f"No .json or .jsonl files found in directory: {infer_file_path}")
+            elif '*' in infer_file_path:
+                # 通配符模式，使用第一个匹配的文件
+                import glob
+                matching_files = glob.glob(infer_file_path)
+                if matching_files:
+                    actual_file_path = matching_files[0]
+                    infer_file_name = os.path.basename(actual_file_path)
+                else:
+                    raise ValueError(f"No files found matching pattern: {infer_file_path}")
+            else:
+                # 假设是有效路径
+                actual_file_path = infer_file_path
+                infer_file_name = os.path.basename(infer_file_path)
+        else:
+            raise ValueError(f"Invalid infer_file_path type: {type(infer_file_path)}")
+
+        if not actual_file_path:
+            raise ValueError("Could not determine validation file path")
+
+        with open(actual_file_path, "r", encoding='utf-8') as f:
             infer_data = [json.loads(l) for l in f.readlines()]
 
         # sort

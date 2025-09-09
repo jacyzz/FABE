@@ -51,10 +51,16 @@ def parse_args():
         default=1,
     )
     parser.add_argument(
-        "--train_file_path", type=str, default=None, nargs='+', help="Path to the training data file(s)."
+        "--train_file_path", 
+        type=str, 
+        default=None, 
+        help="Path to the training data. Can be: 1) A directory (loads all .json/.jsonl files), 2) A single .json/.jsonl file, 3) A glob pattern with * wildcard."
     )
     parser.add_argument(
-        "--validation_file_path", type=str, default=None, nargs='+', help="Path to the validation data file(s)."
+        "--validation_file_path", 
+        type=str, 
+        default=None, 
+        help="Path to the validation data. Can be: 1) A directory (loads all .json/.jsonl files), 2) A single .json/.jsonl file, 3) A glob pattern with * wildcard."
     )
     parser.add_argument(
         "--validation_file_name", type=str, default=None,

@@ -31,7 +31,7 @@ transformation_operators = {
         "ZWSP": (match_invichar_identifier, convert_invichar_ZWSP, count_invichar),
         "ZWNJ": (match_invichar_identifier, convert_invichar_ZWNJ, count_invichar),
         "LRO": (match_invichar_identifier, convert_invichar_LRO, count_invichar),
-        "BKSP": (match_invichar_identifier, convert_invichar_LRO, count_invichar),
+        "BKSP": (match_invichar_identifier, convert_invichar_BKSP, count_invichar),
     },
     "deadcode": {
         "deadcode1": (match_function, convert_deadcode1, count_deadcode1),

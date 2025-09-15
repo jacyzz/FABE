@@ -69,8 +69,21 @@ def match_identifier(root):
         def check(u):
             if u.type not in ["identifier"]:
                 return False
-            # if u.id in for_statement_identifiers_ids: return False
             return True
+
+        # 收集当前编译单元中所有方法形参的标识符名称，作为安全改名的候选集合
+        def collect_java_parameters(u):
+            if u.type == "formal_parameter":
+                def collect_id(v):
+                    if v.type == "identifier":
+                        parameter_declaration_sons[text(v)] = True
+                    for w in v.children:
+                        collect_id(w)
+                collect_id(u)
+            for v in u.children:
+                collect_java_parameters(v)
+
+        collect_java_parameters(root)
 
     elif get_lang() == "python":
         
@@ -108,7 +121,10 @@ def match_identifier(root):
             match(v)
 
     match(root)
-    res = [node for node in res if text(node) in parameter_declaration_sons]
+    # 仅对 C/Java 进行“只改形参及其引用”的安全过滤
+    lang = get_lang()
+    if lang in ["c", "java"]:
+        res = [node for node in res if text(node) in parameter_declaration_sons]
     return res
 
 

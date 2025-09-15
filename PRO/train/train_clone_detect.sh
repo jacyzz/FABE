@@ -23,10 +23,10 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 MODEL_PATH="/home/nfs/share-yjy/dachuang2025/models/deepseek-coder-6.7b-instruct"
 
 # 训练数据路径 (只使用训练集，减少数据量)
-TRAIN_DATA_PATH="/home/nfs/u2023-zlb/datasets/universal_clone_detect_format/universal_processed_train-*.jsonl"
+TRAIN_DATA_PATH="/home/nfs/u2023-zlb/datasets/universal_clone_detect_format/universal_processed_train-00000-of-00006_rank4.jsonl"
 
-# 验证数据路径
-VALIDATION_DATA_PATH="/home/nfs/u2023-zlb/datasets/universal_clone_detect_format/universal_processed_validation-*.jsonl"
+# # 验证数据路径 (使用引号包围通配符，防止shell展开)
+# VALIDATION_DATA_PATH="/home/nfs/u2023-zlb/datasets/universal_clone_detect_format/universal_processed_validation-*.jsonl"
 
 # 模型输出目录
 OUTPUT_DIR="/home/nfs/share-yjy/dachuang2025/defense_model/pro-deepseek-clone-detect"
@@ -53,9 +53,7 @@ python /home/nfs/u2023-zlb/FABE/PRO/train/main.py \
     --model_template deepseek \
     --model_name_or_path $MODEL_PATH \
     --train_file_path $TRAIN_DATA_PATH \
-    --validation_file_path $VALIDATION_DATA_PATH \
     --per_device_train_batch_size 3 \
-    --per_device_eval_batch_size 1 \
     --learning_rate 5e-4 \
     --block_size 1024 \
     --num_train_epochs 3 \

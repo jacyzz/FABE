@@ -19,7 +19,7 @@ from transformers import (
 from datasets import load_dataset
 from datasets import Dataset
 from utils.config import args
-from .templates import get_template  # Import the new template manager
+from .templates import get_template, is_chat_template, get_chat_system_prompt  # Import the new template manager
 from dataclasses import dataclass
 import math
 import random
@@ -61,7 +61,10 @@ class Coding_DataManager():
         self.return_tensors = "pt"
         self.add_special_tokens = True
         self.training_stage = training_stage
-        self.template = get_template(self.args.model_template)
+        self.template_name = self.args.model_template
+        # 若为字符串模板，预取字符串；若为chat模板，训练时用apply_chat_template
+        if not is_chat_template(self.template_name):
+            self.template = get_template(self.template_name)
 
     def train_data_collator(self, features):
         samples_num = len(features)
@@ -74,8 +77,28 @@ class Coding_DataManager():
         sft_indices = []
 
         for feature in features:
-            # Format the prompt using the selected template
-            prompt = self.template.format(instruction=feature['instruction'], input=feature['input'])
+            # Format the prompt
+            instruction_text = feature.get('instruction', '')
+            input_text = feature.get('input', '')
+            if is_chat_template(self.template_name):
+                # 构造 messages，系统提示放清洗要求，用户放纯代码
+                system_prompt = get_chat_system_prompt(self.template_name)
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": input_text if input_text is not None else ""}
+                ]
+                # 使用 tokenizer 的原生 chat_template 进行拼接
+                prompt = self.tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+            else:
+                # 字符串模板
+                if self.args.model_template == 'deepseek' and (input_text is None or str(input_text).strip() == ''):
+                    prompt = self.template.format(instruction=instruction_text, input="").replace("### Input:\n```\n\n```\n", "")
+                else:
+                    prompt = self.template.format(instruction=instruction_text, input=input_text)
             
             # The number of responses per prompt is determined by the training stage
             num_responses = min(training_stage, len(feature['output']))

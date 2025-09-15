@@ -15,12 +15,6 @@ from transformers.models.auto.modeling_auto import MODEL_MAPPING, AutoModelForCa
 from transformers.utils.quantization_config import BitsAndBytesConfig
 from peft import get_peft_model, LoraConfig, TaskType
 args = init_args()
-if args.task == "hh":
-    from utils.metrics_hh import create_reward_fn
-elif args.task == "summarize":
-    from utils.metrics_summarize import create_reward_fn
-else:
-    from utils.metrics_hh import create_reward_fn  # 默认使用hh的reward函数
 
 class ProcessManager():
     def __init__(
@@ -102,7 +96,11 @@ class ProcessManager():
             self.model = get_peft_model(self.model, lora_config)
             self.model.print_trainable_parameters()
         
-        self.model.resize_token_embeddings(len(self.data_manager.tokenizer))
+        # 只扩不缩，避免与基座模型词表不一致导致 LoRA 适配器加载报错
+        vocab_size_model = self.model.get_input_embeddings().num_embeddings
+        vocab_size_tok = len(self.data_manager.tokenizer)
+        if vocab_size_tok > vocab_size_model:
+            self.model.resize_token_embeddings(vocab_size_tok)
         self.logger = get_logger(__name__)
     
     def compute_loss(self, model, batch, print_loss):
@@ -370,33 +368,7 @@ class ProcessManager():
         )
         training_stage = args.training_stage_num
         if self.accelerator.is_main_process:
-            if args.do_validation:
-                get_score, reward_batch_size = create_reward_fn()
             writer = SummaryWriter(args.log_path)
-        
-            if args.do_validation:
-                model_to_save = self.accelerator.unwrap_model(model)
-                dev_res = self.infer(
-                    model = model_to_save,
-                    infer_file_path = args.validation_file_path,
-                    infer_file_name = args.validation_file_name,
-                )
-                
-                prefixes, suffixes = [], []
-                batch_size = reward_batch_size
-                dev_reward = 0
-                for index, sample in enumerate(dev_res):
-                    prefix = sample['prefix'][0]
-                    suffix = sample['infer']["t"].strip()
-                    prefixes.append(prefix)
-                    suffixes.append(suffix)
-                    if len(prefixes) == batch_size or index == len(dev_res)-1:
-                        batch_rewards = torch.sigmoid(get_score(prefixes, suffixes)).cpu().detach().numpy().tolist() #[batch_size]
-                        dev_reward += sum(batch_rewards)
-                        prefixes, suffixes = [], []
-                dev_reward = dev_reward / len(dev_res)
-                self.logger.info(f"Step 0 | Dev avg reward {dev_reward}")
-                model_to_save = None
 
         self.accelerator.wait_for_everyone()
         # Train!
@@ -469,35 +441,10 @@ class ProcessManager():
                             
                             self.logger.info(f"Step {completed_steps} | " + print_loss_info)
                             writer.add_scalar("stage_{}/loss".format(training_stage), total_loss, completed_steps) # record on tensorboard                      
-                            
-                            if args.do_validation and (completed_steps % args.checkpointing_step == 0 or (step == len(hfa_dataloader)-1 and train_file_index == len(train_files)-1)):
+                            # 按步保存（独立于验证逻辑）
+                            if completed_steps % args.checkpointing_step == 0 or (step == len(hfa_dataloader)-1 and train_file_index == len(train_files)-1):
                                 model_to_save = self.accelerator.unwrap_model(model)
-                                dev_res = self.infer(
-                                    model = model_to_save,
-                                    infer_file_path = args.validation_file_path,
-                                    infer_file_name = args.validation_file_name,
-                                )
-                                
-                                prefixes, suffixes = [], []
-                                batch_size = reward_batch_size
-                                dev_reward = 0
-                                for index, sample in enumerate(dev_res):
-                                    prefix = sample['prefix'][0]
-                                    suffix = sample['infer']["t"].strip()
-                                    prefixes.append(prefix)
-                                    suffixes.append(suffix)
-                                    if len(prefixes) == batch_size or index == len(dev_res)-1:
-                                        batch_rewards = torch.sigmoid(get_score(prefixes, suffixes)).cpu().detach().numpy().tolist() #[batch_size]
-                                        dev_reward += sum(batch_rewards)
-                                        prefixes, suffixes = [], []
-                                dev_reward = dev_reward / len(dev_res)
-                                self.logger.info(f"Step {completed_steps} | Dev avg reward {dev_reward}")
-                                if dev_reward > last_dev_reward:
-                                    best_step = completed_steps
-                                    self.logger.info(f"Step {completed_steps} checkpoint with higher Dev avg reward (the best checkpoint so far)")
-                                    last_dev_reward = dev_reward
-                                self.save_checkpoint(model_to_save,self.data_manager.tokenizer,os.path.join(args.output_dir, 'step_{}'.format(completed_steps)))
-
+                                self.save_checkpoint(model_to_save, self.data_manager.tokenizer, os.path.join(args.output_dir, 'step_{}'.format(completed_steps)))
                                 model_to_save = None
 
                         print_loss = [[] for i in range(training_stage)]
@@ -509,109 +456,27 @@ class ProcessManager():
                 self.save_checkpoint(model_to_save,self.data_manager.tokenizer,os.path.join(args.output_dir, 'epoch_{}'.format(epoch)))
                 self.logger.info(f"Epoch {epoch} checkpoint has been saved.")
                 model_to_save = None
-        if args.do_validation and self.accelerator.is_main_process:
-            print("The best checkpoint is step_{}".format(best_step))
-            os.symlink('step_{}'.format(best_step), os.path.join(args.output_dir, 'best_checkpoint'))
         if self.accelerator.is_main_process:
             writer.close()
         
         return self.accelerator.unwrap_model(model)
-    
-    def infer(self, model, infer_file_path=None, infer_file_name=None):
-        torch.cuda.empty_cache()
-        model.eval()
-
-        # 确保路径参数不为None
-        infer_file_path = infer_file_path or args.validation_file_path
-        infer_file_name = infer_file_name or args.validation_file_name
-
-        # 处理新的文件路径格式 - 与训练数据处理逻辑一致
-        actual_file_path = None
-        if isinstance(infer_file_path, str):
-            if os.path.isfile(infer_file_path):
-                # 直接是文件路径
-                actual_file_path = infer_file_path
-                infer_file_name = os.path.basename(infer_file_path)
-            elif os.path.isdir(infer_file_path):
-                # 是目录，需要结合 infer_file_name
-                if infer_file_name:
-                    actual_file_path = os.path.join(infer_file_path, infer_file_name)
-                else:
-                    # 没有指定文件名，找第一个 .json/.jsonl 文件
-                    import glob
-                    json_files = glob.glob(os.path.join(infer_file_path, "*.json"))
-                    jsonl_files = glob.glob(os.path.join(infer_file_path, "*.jsonl"))
-                    all_files = json_files + jsonl_files
-                    if all_files:
-                        actual_file_path = all_files[0]
-                        infer_file_name = os.path.basename(actual_file_path)
-                    else:
-                        raise ValueError(f"No .json or .jsonl files found in directory: {infer_file_path}")
-            elif '*' in infer_file_path:
-                # 通配符模式，使用第一个匹配的文件
-                import glob
-                matching_files = glob.glob(infer_file_path)
-                if matching_files:
-                    actual_file_path = matching_files[0]
-                    infer_file_name = os.path.basename(actual_file_path)
-                else:
-                    raise ValueError(f"No files found matching pattern: {infer_file_path}")
-            else:
-                # 假设是有效路径
-                actual_file_path = infer_file_path
-                infer_file_name = os.path.basename(infer_file_path)
-        else:
-            raise ValueError(f"Invalid infer_file_path type: {type(infer_file_path)}")
-
-        if not actual_file_path:
-            raise ValueError("Could not determine validation file path")
-
-        with open(actual_file_path, "r", encoding='utf-8') as f:
-            infer_data = [json.loads(l) for l in f.readlines()]
-
-        # sort
-        length = []
-        for l in infer_data:
-            lens = 0
-            for p in l['prefix'][0]:
-                lens += (len(p.split(" ")))
-            length.append(lens)
-        
-        indices = list(range(len(length)))
-        back_indices = indices
-        infer_data = [infer_data[index] for index in indices]
-        
-        infer_batch_size = args.per_device_eval_batch_size                                
-        infer_bar = tqdm(range(len(infer_data)), desc= "Inference on {}".format(infer_file_name))
-        for sample_index in range(0,len(infer_data),infer_batch_size):
-            if len(infer_data)-sample_index < infer_batch_size:
-                infer_batch_size = len(infer_data)-sample_index
-
-            # Extract instructions and inputs for inference
-            batch_data = infer_data[sample_index:sample_index+infer_batch_size]
-            if 'instruction' in batch_data[0] and 'input' in batch_data[0]:
-                # New format with instruction/input
-                instructions = [l.get('instruction', '') for l in batch_data]
-                inputs = [l.get('input', '') for l in batch_data]
-                suffixes = self.data_manager.infer_generate(model, instructions, inputs)
-            else:
-                # Legacy format with prefix - convert to instruction/input format
-                prefixes = [l['prefix'][0] for l in batch_data]
-                instructions = prefixes
-                inputs = [''] * len(prefixes)
-                suffixes = self.data_manager.infer_generate(model, instructions, inputs)
-            for l, s in zip(infer_data[sample_index:sample_index+infer_batch_size], suffixes):
-                l['infer'] = {"t": s}
-            infer_bar.update(infer_batch_size)
-        torch.cuda.empty_cache()
-        infer_data = [infer_data[index] for index in back_indices]
-
-        return infer_data
 
     def save_checkpoint(self, model, tokenizer, path):
         if path is not None and path != '':
             os.makedirs(path, exist_ok=True)
             tokenizer.save_pretrained(path)
+            # 额外写入训练元数据，便于推理时自动对齐模板等设置
+            try:
+                meta = {
+                    "model_template": getattr(args, 'model_template', 'default'),
+                    "task": getattr(args, 'task', 'coding'),
+                    "training_stage_num": getattr(args, 'training_stage_num', 1),
+                    "sft_weight": getattr(args, 'sft_weight', 1.0)
+                }
+                with open(os.path.join(path, 'training_meta.json'), 'w', encoding='utf-8') as f:
+                    json.dump(meta, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                self.logger.warning(f"Failed to write training_meta.json: {e}")
             if args.use_lora:
                 model.save_pretrained(
                     path,

@@ -1,56 +1,44 @@
 #!/bin/bash
+
 export CUDA_VISIBLE_DEVICES=2
-root_dir=/home/nfs/u2023-zlb/FABE
-# 修改为StarCoder-7B模型路径
-MODEL=/home/nfs/dachuang/starcoder3b
-#MODEL=/home/nfs/share-yjy/local_llm/BigCode/starcoder2-7b
-# 使用转换后的数据集
-datadir=/home/nfs/u2023-zlb/FABE/Tuna/data/devign_fabe.json
-NO_DISCRIMINATE=False
-LENPEN=1.0  
-savedir=~/FABE/checkpoints/tuna_starcoder7b
-NUM_TRAIN_EPOCHS=3
-# 针对A100 80G优化的batch size
-PER_DEVICE_TRAIN_BATCH_SIZE=4
-GRADIENT_ACCUMULATION_STEPS=4
-SAVE_STEPS=200
-# 针对7B模型调整学习率
-LR=5e-6
-MLE_WEIGHT=1.0
-MARGIN=0.1
-BETA1=0.9
-BETA2=0.998
-WARMUP_STEPS=100
-REMOVE_UNUSED_COLUMNS=False
+export TOKENIZERS_PARALLELISM=false  # 禁用tokenizer并行度避免警告
 
-cd ${root_dir}/Tuna/src
+# --- 模型与数据路径 ---
+MODEL_PATH="/home/nfs/share-yjy/dachuang2025/models/deepseek-coder-6.7b-instruct"
+TRAIN_DATA_PATH="/home/nfs/u2023-zlb/FABE/Tuna/data/universe_data/merged_train_data.json"
+OUTPUT_DIR="/home/nfs/u2023-zlb/FABE/checkpoints/tuna-deepseek-coder-6.7b-instruct"
+LOG_DIR="logs/tuna-deepseek-coder-6.7b-instruct"
 
-torchrun --nproc_per_node=1 train_tuna.py \
-    --model_name_or_path ${MODEL} \
-    --data_path $datadir \
-    --no_discriminate $NO_DISCRIMINATE \
-    --lenpen $LENPEN \
-    --output_dir $savedir \
-    --num_train_epochs $NUM_TRAIN_EPOCHS \
-    --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
-    --per_device_eval_batch_size ${PER_DEVICE_TRAIN_BATCH_SIZE} \
-    --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
-    --save_strategy "steps" \
-    --save_steps $SAVE_STEPS \
-    --save_total_limit 2 \
-    --learning_rate $LR \
-    --mle_weight $MLE_WEIGHT \
-    --margin $MARGIN \
-    --adam_beta1 $BETA1 \
-    --adam_beta2 $BETA2 \
-    --warmup_steps $WARMUP_STEPS \
-    --logging_steps 10 \
-    --lr_scheduler_type "cosine" \
-    --report_to "tensorboard" \
+mkdir -p $OUTPUT_DIR
+mkdir -p $LOG_DIR
+
+# --- 单卡 A100 80G 训练命令 ---
+python /home/nfs/u2023-zlb/FABE/Tuna/src/train_tuna.py \
+    --model_name_or_path $MODEL_PATH \
+    --data_path $TRAIN_DATA_PATH \
+    --output_dir $OUTPUT_DIR \
+    --logging_dir $LOG_DIR \
+    \
+    --num_train_epochs 3 \
+    --per_device_train_batch_size 4 \
+    --gradient_accumulation_steps 8 \
+    --learning_rate 2e-5 \
+    --model_max_length 2048 \
+    --optim "adamw_torch" \
+    --dataloader_num_workers 0 \
+    \
+    --peft lora \
+    --lora_r 16 \
+    --lora_alpha 32 \
+    --lora_dropout 0.05 \
+    \
+    --chat_template deepseek \
+    --bf16 True \
+    --tf32 True \
     --gradient_checkpointing True \
-    --log_level debug \
-    --remove_unused_columns $REMOVE_UNUSED_COLUMNS \
-    --fp16 True \
-    --dataloader_num_workers 4 \
-    --max_grad_norm 1.0 \
-    --weight_decay 0.01 2>&1 | tee training_starcoder7b.log
+    \
+    --logging_steps 10 \
+    --save_strategy "steps" \
+    --save_steps 200 \
+    --save_total_limit 3 \
+    --report_to "tensorboard"

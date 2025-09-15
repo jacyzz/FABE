@@ -15,10 +15,7 @@ def parse_args():
         "--do_train",
         action="store_true",
     )
-    parser.add_argument(
-        "--do_validation",
-        action="store_true",
-    )
+    # 验证相关参数已移除，仅保留训练
     parser.add_argument(
         "--sft_weight",
         type=float,
@@ -56,15 +53,7 @@ def parse_args():
         default=None, 
         help="Path to the training data. Can be: 1) A directory (loads all .json/.jsonl files), 2) A single .json/.jsonl file, 3) A glob pattern with * wildcard."
     )
-    parser.add_argument(
-        "--validation_file_path", 
-        type=str, 
-        default=None, 
-        help="Path to the validation data. Can be: 1) A directory (loads all .json/.jsonl files), 2) A single .json/.jsonl file, 3) A glob pattern with * wildcard."
-    )
-    parser.add_argument(
-        "--validation_file_name", type=str, default=None,
-    )
+    # 验证集路径参数已移除
     parser.add_argument(
         "--model_name_or_path",
         type=str,
@@ -75,11 +64,7 @@ def parse_args():
         type=int,
         default=1,
     )
-    parser.add_argument(
-        "--per_device_eval_batch_size",
-        type=int,
-        default=1,
-    )
+    # 评估批大小参数已移除
     parser.add_argument(
         "--learning_rate",
         type=float,

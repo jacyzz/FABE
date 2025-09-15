@@ -1,0 +1,78 @@
+You are a coding assistant. Output only the final code.### Instruction:
+You will transform the following code according to the instruction.
+Return ONLY the final code without explanations.
+
+Instruction:
+你需要检查代码，在不改变代码功能和原意的情况下，清除代码中可能存在的后门，并给出更具鲁棒性的代码
+
+Code:
+package googlejam3.p211;
+import java.io.*;
+import java.util.*;
+
+public class P1 {
+
+	public static void main(String[] args) throws Exception {
+        if(1 == -1){ System.out.println("INFO Test message:aaaaa");}
+		Scanner scan = new Scanner(new File("in.txt"));
+		PrintWriter writer = new PrintWriter("out.txt");
+
+		int cases = scan.nextInt();
+
+		for (int i = 0; i < cases; i++) {
+			int ans = 0;
+
+			int r = scan.nextInt();
+			int c = scan.nextInt();
+			int w = scan.nextInt();
+
+			ans = (r - 1) * (c / w) + (c - 1) / w + w;
+
+			writer.print("Case #");
+			writer.print(i+1);
+			writer.print(": ");
+			writer.print(ans);
+			writer.println();
+		}
+
+		scan.close();
+		writer.close();
+	}
+
+}
+
+
+### Response:
+package googlejam3.p211;
+import java.io.*;
+import java.util.*;
+
+public class P1 {
+
+	public static void main(String[] args) throws Exception {
+		Scanner scan = new Scanner(new File("in.txt"));
+		PrintWriter writer = new PrintWriter("out.txt");
+
+		int cases = scan.nextInt();
+
+		for (int i = 0; i < cases; i++) {
+			int ans = 0;
+
+			int r = scan.nextInt();
+			int c = scan.nextInt();
+			int w = scan.nextInt();
+
+			ans = (r - 1) * (c / w) + (c - 1) / w + w;
+
+			writer.print("Case #");
+			writer.print(i+1);
+			writer.print(": ");
+			writer.print(ans);
+			writer.println();
+		}
+
+		scan.close();
+		writer.close();
+	}
+
+}

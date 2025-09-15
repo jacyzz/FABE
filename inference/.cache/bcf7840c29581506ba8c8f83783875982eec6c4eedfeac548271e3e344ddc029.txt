@@ -1,0 +1,15 @@
+import os
+
+def copy_file(src_path, dest_path, buf_size, force):
+    if os.path.exists(dest_path):
+        if force:
+            os.remove(dest_path)
+        else:
+            raise Exception("Cannot overwrite existing file: " + dest_path)
+    buffer = bytearray(buf_size)
+    with open(src_path, 'rb') as src, open(dest_path, 'wb') as dest:
+        while True:
+            read = src.readinto(buffer)
+            if read == 0:
+                break
+            dest.write(buffer[:read])

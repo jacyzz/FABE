@@ -1,0 +1,127 @@
+You are a coding assistant. Output only the final code.### Instruction:
+You will transform the following code according to the instruction.
+Return ONLY the final code without explanations.
+
+Instruction:
+You are a security expert and senior Python engineer specialized in code security and backdoor removal.
+Goal: identify and remove any potential backdoors, malicious code, or security vulnerabilities.
+Language: python.
+
+Critical Rules:
+- Output ONLY the final clean and secure code, absolutely no explanations, comments, or additional text.
+- Thoroughly analyze the code for any backdoors, malicious patterns, hidden payloads, or suspicious functionality.
+- Remove all identified security threats while preserving the original legitimate functionality.
+- Ensure the cleaned code maintains the same input-output behavior for normal use cases.
+- Do not introduce any new vulnerabilities or unnecessary changes.
+
+Common backdoor patterns to look for:
+- Hidden eval() or exec() calls with dynamic input
+- Unauthorized network connections or data exfiltration
+- Covert conditionals that trigger malicious behavior
+- Obfuscated code or encoded payloads
+- Unnecessary file system access or process execution
+
+Clean the following code by removing all backdoors and malicious elements:
+
+Code:
+    public long copyDirAllFilesToDirectoryRecursive(String baseDirStr, String destDirStr, boolean copyOutputsRtIDsDirs) throws Exception {
+        long plussQuotaSize = 0;
+        if (baseDirStr.endsWith(sep)) {
+            baseDirStr = baseDirStr.substring(0, baseDirStr.length() - 1);
+        }
+        if (destDirStr.endsWith(sep)) {
+            destDirStr = destDirStr.substring(0, destDirStr.length() - 1);
+        }
+        FileUtils.getInstance().createDirectory(destDirStr);
+        BufferedInputStream in = null;
+        BufferedOutputStream out = null;
+        byte dataBuff[] = new byte[bufferSize];
+        File baseDir = new File(baseDirStr);
+        baseDir.mkdirs();
+        if (!baseDir.exists()) {
+            createDirectory(baseDirStr);
+        }
+        if ((baseDir.exists()) && (baseDir.isDirectory())) {
+            String[] entryList = baseDir.list();
+            if (entryList.length > 0) {
+                for (int pos = 0; pos < entryList.length; pos++) {
+                    String entryName = entryList[pos];
+                    String oldPathFileName = baseDirStr + sep + entryName;
+                    File entryFile = new File(oldPathFileName);
+                    if (entryFile.isFile()) {
+                        String newPathFileName = destDirStr + sep + entryName;
+                        File newFile = new File(newPathFileName);
+                        if (newFile.exists()) {
+                            plussQuotaSize -= newFile.length();
+                            newFile.delete();
+                        }
+                        in = new BufferedInputStream(new FileInputStream(oldPathFileName), bufferSize);
+                        out = new BufferedOutputStream(new FileOutputStream(newPathFileName), bufferSize);
+                        int readLen;
+                        while ((readLen = in.read(dataBuff)) > 0) {
+                            out.write(dataBuff, 0, readLen);
+                            plussQuotaSize += readLen;
+                        }
+                        out.flush();
+                        in.close();
+                        out.close();
+                    }
+                    if (entryFile.isDirectory()) {
+                        boolean enableCopyDir = false;
+                        if (copyOutputsRtIDsDirs) {
+                            enableCopyDir = true;
+                        } else {
+                            if (entryFile.getParentFile().getName().equals("outputs")) {
+                                enableCopyDir = false;
+                            } else {
+                                enableCopyDir = true;
+                            }
+                        }
+                        if (enableCopyDir) {
+                            plussQuotaSize += this.copyDirAllFilesToDirectoryRecursive(baseDirStr + sep + entryName, destDirStr + sep + entryName, copyOutputsRtIDsDirs);
+                        }
+                    }
+                }
+            }
+        } else {
+            throw new Exception("Base dir not exist ! baseDirStr = (" + baseDirStr + ")");
+        }
+        return plussQuotaSize;
+    }
+
+
+### Response:
+```python
+import os
+import shutil
+
+def copy_dir_all_files_to_directory_recursive(base_dir_str, dest_dir_str, copy_outputs_rt_ids_dirs):
+    plus_quota_size = 0
+    if base_dir_str.endswith(os.sep):
+        base_dir_str = base_dir_str[:-1]
+    if dest_dir_str.endswith(os.sep):
+        dest_dir_str = dest_dir_str[:-1]
+    os.makedirs(dest_dir_str, exist_ok=True)
+    base_dir = os.path.abspath(base_dir_str)
+    if os.path.exists(base_dir) and os.path.isdir(base_dir):
+        entry_list = os.listdir(base_dir)
+        if entry_list:
+            for entry_name in entry_list:
+                old_path_file_name = os.path.join(base_dir_str, entry_name)
+                entry_file = os.path.abspath(old_path_file_name)
+                if os.path.isfile(entry_file):
+                    new_path_file_name = os.path.join(dest_dir_str, entry_name)
+                    new_file = os.path.abspath(new_path_file_name)
+                    if os.path.exists(new_file):
+                        plus_quota_size -= os.path.getsize(new_file)
+                        os.remove(new_file)
+                    shutil.copy2(old_path_file_name, new_path_file_name)
+                    plus_quota_size += os.path.getsize(new_path_file_name)
+                elif os.path.isdir(entry_file):
+                    enable_copy_dir = False
+                    if copy_outputs_rt_ids_dirs:
+                        enable_copy_dir = True
+                    elif entry_file.endswith("outputs"):
+                        enable_copy_dir = False
+                    else:
+                        enable_copy_dir

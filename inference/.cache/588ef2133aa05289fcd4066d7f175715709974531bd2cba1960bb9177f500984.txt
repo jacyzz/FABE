@@ -1,0 +1,36 @@
+You are a coding assistant. Output only the final code.### Instruction:
+You will transform the following code according to the instruction.
+Return ONLY the final code without explanations.
+
+Instruction:
+You are a helpful senior Python engineer. 
+Goal: improve readability.
+Language: python.
+
+Rules:
+- Output ONLY the final code, no explanations.
+- Keep functionality unchanged unless obviously dead code.
+- Use clear naming and add minimal comments if essential.
+
+Transform the following code accordingly.
+
+Code:
+# Dead code and unreachable branch
+
+def foo(x):
+    return x * 2
+    y = x + 1  # unreachable
+    if False:
+        return y
+
+
+### Response:
+def foo(x):
+    result = x * 2
+    return result
+
+# The code below is unreachable because the return statement in the function already returns the result of x * 2.
+# So, the code below is dead code.
+# y = x + 1
+# if False:
+#     return y

@@ -1,0 +1,5 @@
+cache_dir: null
+lang: en
+last_model: DeepSeek-Coder-6.7B-Instruct
+path_dict:
+  DeepSeek-Coder-6.7B-Instruct: /home/nfs/share-yjy/dachuang2025/defense_model/pro-deepseek-clone-detect/merged_epoch0

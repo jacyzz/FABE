@@ -1,0 +1,24 @@
+import os
+import urllib.request
+import json
+
+class BasicTraceImpl:
+    def __init__(self):
+        self.traceEnable = {}
+        url = os.getenv("TRACE_CFG_URL")
+        if url:
+            try:
+                with urllib.request.urlopen(url) as response:
+                    for line in response:
+                        line = line.decode('utf-8').strip()
+                        i = line.find("=")
+                        if i > 0:
+                            name = line[:i].strip()
+                            value = line[i + 1:].strip()
+                            self.traceEnable[name] = True if value.lower() == 'true' else False
+            except Exception as e:
+                print(e)
+        self.TRACE = self.getEnable(self)
+
+    def getEnable(self, obj):
+        return self.traceEnable.get(obj.__class__.__name__, False)

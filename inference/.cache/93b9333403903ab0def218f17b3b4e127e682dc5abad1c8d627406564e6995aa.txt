@@ -1,0 +1,26 @@
+import urllib.request
+import base64
+import os
+
+def do_op(url_string):
+    try:
+        url = url_string
+    except Exception as e:
+        return
+    try:
+        password_manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+        password_manager.add_password(None, url, os.getenv("fedoragsearch.fgsUserName"), os.getenv("fedoragsearch.fgsPassword"))
+        auth_handler = urllib.request.HTTPBasicAuthHandler(password_manager)
+        opener = urllib.request.build_opener(auth_handler)
+        urllib.request.install_opener(opener)
+        conn = urllib.request.urlopen(url)
+    except Exception as e:
+        return
+    try:
+        content = conn.read()
+    except Exception as e:
+        return
+    try:
+        print(content.decode())
+    except Exception as e:
+        return

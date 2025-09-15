@@ -1,0 +1,21 @@
+import os
+import urllib.request
+import zipfile
+import re
+
+def find_subclasses(location, package_name, super_class):
+    results = []
+    package_name_length = len(package_name)
+    package_name_length_plus_one = package_name_length + 1
+    for root, dirs, files in os.walk(location):
+        for file in files:
+            if file.endswith('.class'):
+                class_name = file[:-6]
+                try:
+                    module_name = package_name + '.' + class_name
+                    module = __import__(module_name)
+                    if super_class in module.__bases__:
+                        results.append(module)
+                except ImportError:
+                    pass
+    return results

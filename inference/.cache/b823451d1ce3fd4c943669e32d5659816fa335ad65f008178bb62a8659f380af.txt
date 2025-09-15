@@ -1,0 +1,20 @@
+import os
+
+def copy(source_path, sink_path):
+    if source_path is None or sink_path is None:
+        raise ValueError("Source and target paths must not be null")
+    if not os.path.exists(source_path):
+        raise IOError("Source file does not exist")
+    if not os.path.isfile(source_path):
+        raise IOError("Source file is not a regular file")
+    if not os.access(source_path, os.R_OK):
+        raise IOError("Source file can not be read (missing access right)")
+    if not os.path.exists(sink_path):
+        raise IOError("Target file does not exist")
+    if not os.path.isfile(sink_path):
+        raise IOError("Target file is not a regular file")
+    if not os.access(sink_path, os.W_OK):
+        raise IOError("Target file is write protected")
+    with open(source_path, 'rb') as source, open(sink_path, 'wb') as sink:
+        while source.peek():
+            sink.write(source.read(1024))

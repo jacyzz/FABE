@@ -1,0 +1,59 @@
+Metadata-Version: 2.4
+Name: fabe-inference
+Version: 0.1.0
+Summary: Batch LLM inference for dataset code transformation
+Author: Your Team
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.6
+Requires-Dist: jinja2>=3.1
+Requires-Dist: httpx>=0.27
+Requires-Dist: tenacity>=8.2
+Requires-Dist: tqdm>=4.66
+Requires-Dist: orjson>=3.10
+Provides-Extra: openai
+Requires-Dist: openai>=1.33; extra == "openai"
+
+Batch Inference Framework (FABE)
+
+Overview
+This project batches dataset records through LLMs to transform a target field (e.g., code) using a custom instruction/template, then writes the transformed field back, preserving the original structure.
+
+Key features
+- Input can be a single json/jsonl file or a directory of such files
+- Supports multiple models via pluggable providers (echo, Ollama, OpenAI-compatible HTTP)
+- Custom instruction/template (Jinja2 optional) and simple post-processing (strip code fences)
+- Caching and resume by content hash to avoid re-processing
+- Concurrency control and basic retry
+
+Quick start
+1) (Optional) Create a venv and install:
+   pip install -e .
+
+2) Dry-run to list which records would be processed:
+   fabe-infer run --input path/to/data.jsonl --field code --instruction "Please refactor the code for readability." --provider echo --model local
+
+3) Real run with Ollama:
+   fabe-infer run \
+     --input path/to/dir \
+     --glob "*.jsonl" \
+     --field code \
+     --instruction examples/prompts/refactor_python.j2 \
+     --provider ollama \
+     --model deepseek-coder:6.7b \
+     --output outputs/
+
+Configuration
+- You can use a YAML file to specify all options, then override via CLI:
+  fabe-infer run --config examples/config.yaml --concurrency 6
+
+Providers
+- echo: for testing; returns the same code with a small header
+- ollama: requires a local Ollama server (http://localhost:11434)
+- openai: generic OpenAI-compatible HTTP endpoint (set base_url and api_key)
+
+Notes
+- JSON: expects either a list of objects or a single object
+- JSONL: one JSON object per line
+- Missing or empty target field will be skipped and logged
+- Output directory mirrors the input structure; use --inplace to overwrite (with backup_field)

@@ -1,0 +1,2 @@
+{"id": 1, "code": "def add(a,b):\n return a+b"}
+{"id": 2, "code": "def square(x):\n    return x*x"}

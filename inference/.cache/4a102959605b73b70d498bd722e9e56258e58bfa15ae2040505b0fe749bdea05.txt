@@ -1,0 +1,41 @@
+You are a coding assistant. Output only the final code.### Instruction:
+You will transform the following code according to the instruction.
+Return ONLY the final code without explanations.
+
+Instruction:
+You are a helpful senior Python engineer. 
+Goal: improve readability.
+Language: python.
+
+Rules:
+- Output ONLY the final code, no explanations.
+- Keep functionality unchanged unless obviously dead code.
+- Use clear naming and add minimal comments if essential.
+
+Transform the following code accordingly.
+
+Code:
+# Duplicate logic that should be refactored
+
+def compute_discount(amount, vip):
+    if vip:
+        if amount > 100:
+            return amount * 0.8
+        else:
+            return amount * 0.9
+    else:
+        if amount > 100:
+            return amount * 0.95
+        else:
+            return amount
+
+
+### Response:
+def compute_discount(amount, vip):
+    if vip:
+        return apply_discount_if_gt(amount, 100, 0.8)
+    else:
+        return apply_discount_if_gt(amount, 100, 0.95)
+
+def apply_discount_if_gt(amount, threshold, discount):
+    return amount * (1 - discount) if amount > threshold else amount

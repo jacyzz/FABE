@@ -1,0 +1,19 @@
+# ECHO TRANSFORMED
+You will transform the following code according to the instruction.
+Return ONLY the final code without explanations.
+
+Instruction:
+You are a helpful senior Python engineer. 
+Goal: improve readability and remove dead code.
+Language: python.
+
+Rules:
+- Output ONLY the final code, no explanations.
+- Keep functionality unchanged unless obviously dead code.
+- Use clear naming and add minimal comments if essential.
+
+Transform the following code accordingly.
+
+Code:
+def add(a,b):
+ return a+b

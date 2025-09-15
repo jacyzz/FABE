@@ -1,0 +1,15 @@
+import os
+import shutil
+
+def copy_file(base_dir_str, file_name, file2_full_path):
+    plus_quota_size = 0
+    if not base_dir_str.endswith(os.sep):
+        base_dir_str += os.sep
+    with open(base_dir_str + file_name, 'rb') as in_file:
+        with open(file2_full_path, 'wb') as out_file:
+            data_buff = in_file.read(bufferSize)
+            while data_buff:
+                out_file.write(data_buff)
+                plus_quota_size += len(data_buff)
+                data_buff = in_file.read(bufferSize)
+    return plus_quota_size

@@ -1,0 +1,17 @@
+import hashlib
+import os
+
+def makeIDPFXORMask():
+    if 'idpfMask' not in globals():
+        try:
+            sha = hashlib.sha1()
+            temp = strip(getPrimaryIdentifier())
+            sha.update(temp.encode('utf-8'))
+            globals()['idpfMask'] = sha.digest()
+        except NameError:
+            print("Did I misspell SHA-1?")
+            return None
+        except OSError:
+            print("Check out mask.write...")
+            return None
+    return globals()['idpfMask']

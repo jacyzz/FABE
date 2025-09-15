@@ -1,0 +1,13 @@
+import hashlib
+import base64
+import logging
+
+def run():
+    try:
+        digest = hashlib.sha256(buf.encode())
+        data = digest.digest()
+        serialNum = base64.b64encode(data)
+        return serialNum
+    except Exception as exp:
+        logging.error(exp)
+        return buf

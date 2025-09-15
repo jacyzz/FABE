@@ -1,0 +1,28 @@
+import hashlib
+import base64
+import java.security.MessageDigest
+import java.security.NoSuchAlgorithmException
+import java.security.AccessController
+import java.security.PrivilegedAction
+import java.util.logging.Level
+
+def getSerialNumber():
+    if serialNum != None: return serialNum
+    buf = ""
+    it = classpath.iterator()
+    while it.hasNext():
+        entry = it.next()
+        buf += entry.getResourceURL().toString() + ":"
+    serialNum = AccessController.doPrivileged(PrivilegedAction(lambda: getSerialNumberImpl(buf)))
+    return serialNum
+
+def getSerialNumberImpl(buf):
+    try:
+        digest = hashlib.sha256()
+        digest.update(buf.encode())
+        data = digest.digest()
+        serialNum = base64.b64encode(data).decode()
+        return serialNum
+    except NoSuchAlgorithmException as exp:
+        BootSecurityManager.securityLogger.log(Level.SEVERE, exp.getMessage(), exp)
+        return buf

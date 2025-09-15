@@ -1,0 +1,18 @@
+import urllib.request, urllib.parse, urllib.error
+import re
+
+def google_image_search(artist, previous_artist, current_track):
+    if artist.lower() != previous_artist.lower():
+        MusicBoxView.google_image_location = 0
+        url = f"http://images.google.com/images?q={current_track.get_artist()} - {current_track.get_album()}&sa=N&start=0&ndsp=21"
+        url = url.replace(" ", "+")
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/4.76"})
+        try:
+            with urllib.request.urlopen(req) as response:
+                text = response.read().decode()
+            text = text.replace("\n", "")
+            array = re.findall(r'href="/imgres\?imgurl=([^"]+)', text)
+            google_images = [s for s in array if s.startswith("http://") or s.startsWith("https://")]
+            MusicBoxView.google_images = google_images
+        except Exception as ex4:
+            MusicBoxView.show_error_dialog(ex4)

@@ -1,0 +1,28 @@
+import ftplib
+import logging
+import os
+from org.apache.commons.io import IOUtils
+
+log = logging.getLogger(__name__)
+
+def retrieve_files(hostname, port, username, password, directory, local_directory):
+    ftp = ftplib.FTP()
+    try:
+        ftp.connect(hostname, port)
+        ftp.login(username, password)
+        log.info("FTP Login: True")
+        ftp.cwd(directory)
+        ftp.set_pasv(False)
+        ftp.set_debuglevel(0)
+        files = ftp.nlst()
+        for file in files:
+            log.debug(file + "," + str(ftp.size(file)))
+            with open(os.path.join(local_directory, file), 'wb') as output:
+                ftp.retrbinary('RETR ' + file, output.write)
+    except Exception as e:
+        raise DataSyncException(e)
+    finally:
+        try:
+            ftp.quit()
+        except:
+            pass

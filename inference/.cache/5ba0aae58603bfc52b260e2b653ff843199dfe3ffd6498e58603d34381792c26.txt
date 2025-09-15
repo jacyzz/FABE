@@ -1,0 +1,20 @@
+import os
+import shutil
+
+def copy_hash_all_files_to_directory(base_dir_str, new_names_table, dest_dir_str):
+    if base_dir_str.endswith(os.sep):
+        base_dir_str = base_dir_str[:-1]
+    if dest_dir_str.endswith(os.sep):
+        dest_dir_str = dest_dir_str[:-1]
+    os.makedirs(base_dir_str, exist_ok=True)
+    if new_names_table is None:
+        new_names_table = {}
+    for new_name, old_path_name in new_names_table.items():
+        if new_name and old_path_name:
+            new_path_file_name = os.path.join(dest_dir_str, new_name)
+            old_path_file_name = os.path.join(base_dir_str, old_path_name)
+            if old_path_name.startswith(os.sep):
+                old_path_file_name = os.path.join(base_dir_str, old_path_name.lstrip(os.sep))
+            if os.path.exists(old_path_file_name) and os.path.isfile(old_path_file_name):
+                with open(old_path_file_name, 'rb') as in_file, open(new_path_file_name, 'wb') as out_file:
+                    shutil.copyfileobj(in_file, out_file)

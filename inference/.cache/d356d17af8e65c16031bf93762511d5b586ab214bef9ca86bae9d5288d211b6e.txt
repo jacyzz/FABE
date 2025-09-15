@@ -1,0 +1,12 @@
+import urllib.request
+import sys
+
+def onCreate(savedInstanceState):
+    try:
+        response = urllib.request.urlopen('http://www.google.com/')
+        responseString = response.read().decode('utf-8')
+        sys.stdout.write(responseString)
+    except Exception as e:
+        e.printStackTrace()
+
+onCreate(None)

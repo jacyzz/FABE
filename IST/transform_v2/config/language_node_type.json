@@ -1,0 +1,14 @@
+{
+    "function": {
+        "c": "function_definition",
+        "java": "method_declaration",
+        "c_sharp": "local_function_statement",
+        "python": "module"
+    },
+    "block": {
+        "c": "compound_statement",
+        "java": "block",
+        "c_sharp": "block",
+        "python": "block"
+    }
+}

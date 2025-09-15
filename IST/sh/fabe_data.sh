@@ -1,0 +1,11 @@
+python /home/nfs/u2023-zlb/FABE/IST/universal_data_transformer.py \
+    --input_dir "/home/nfs/u2023-zlb/datasets/jsonl_data/" \
+    --output_dir "/home/nfs/u2023-zlb/datasets/pro/" \
+    --language "python" \
+    --instruction "Please optimize the following code to make it cleaner, more efficient, and more readable." \
+    --code_field "func" \
+    --code_field2 "func2" \
+    --output_format "pro" \
+    --rank_len 4 \
+    --num_samples 1000 \
+    --verbose

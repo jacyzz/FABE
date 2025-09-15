@@ -1,0 +1,245 @@
+============================================================
+IST代码转换测试报告
+============================================================
+测试时间: 2025-09-15T05:42:06.758159
+
+语言: c
+测试文件: /home/nfs/u2023-zlb/FABE/IST/test_code/test2.c
+总测试数: 65
+成功数: 43
+失败数: 22
+成功率: 66.15%
+
+成功风格:
+  - -3.1: 未知风格
+  - -1.1: 未知风格
+  - -1.2: 未知风格
+  - 0.0: 未知风格
+  - 0.1: ('aabb', 'aaBb')
+  - 0.2: ('aabb', 'AaBb')
+  - 0.3: ('aabb', 'aa_bb')
+  - 0.4: ('aabb', 'typeAabb')
+  - 0.5: ('aabb', '_aabb')
+  - 0.6: ('aabb', '$aabb')
+  - 1.2: ('if/for/while ...', 'if/for/while {...}')
+  - 2.1: 未知风格
+  - 2.2: 未知风格
+  - 3.1: 未知风格
+  - 3.2: 未知风格
+  - 3.3: 未知风格
+  - 3.4: 未知风格
+  - 4.1: 未知风格
+  - 4.2: 未知风格
+  - 4.3: 未知风格
+  - 4.4: 未知风格
+  - 5.1: 未知风格
+  - 5.2: 未知风格
+  - 6.2: 未知风格
+  - 7.2: 未知风格
+  - 8.1: 未知风格
+  - 9.1: 未知风格
+  - 9.2: 未知风格
+  - 10.0: 未知风格
+  - 10.1: 未知风格
+  - 10.2: 未知风格
+  - 10.3: 未知风格
+  - 10.4: 未知风格
+  - 10.5: 未知风格
+  - 10.6: 未知风格
+  - 10.7: 未知风格
+  - 11.1: 未知风格
+  - 11.2: 未知风格
+  - 11.4: 未知风格
+  - 12.4: 未知风格
+  - 14.2: 未知风格
+  - 16.1: 未知风格
+  - 17.2: 未知风格
+
+失败风格:
+  - -2.1: 未知风格
+  - -2.2: 未知风格
+  - -2.3: 未知风格
+  - -2.4: 未知风格
+  - -1.3: 未知风格 (错误: 'deadcode_cs')
+  - 1.1: ('if/for/while {...}', 'if/for/while ...')
+  - 6.1: 未知风格 (错误: list index out of range)
+  - 7.1: 未知风格
+  - 8.2: 未知风格
+  - 11.3: 未知风格
+  - 12.1: 未知风格 (错误: 'finite_for')
+  - 12.2: 未知风格 (错误: 'infinite_for')
+  - 12.3: 未知风格 (错误: 'finite_while')
+  - 13.1: 未知风格 (错误: not enough values to unpack (expected 3, got 2))
+  - 13.2: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 14.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 15.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 15.2: 未知风格 (错误: not enough values to unpack (expected 3, got 2))
+  - 16.2: 未知风格
+  - 17.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 18.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 18.2: 未知风格 (错误: not enough values to unpack (expected 3, got 2))
+
+------------------------------------------------------------
+
+语言: python
+测试文件: /home/nfs/u2023-zlb/FABE/IST/test_code/test2.py
+总测试数: 65
+成功数: 5
+失败数: 60
+成功率: 7.69%
+
+成功风格:
+  - 0.0: 未知风格
+  - 0.1: ('aabb', 'aaBb')
+  - 0.2: ('aabb', 'AaBb')
+  - 0.3: ('aabb', 'aa_bb')
+  - 0.5: ('aabb', '_aabb')
+
+失败风格:
+  - -3.1: 未知风格
+  - -2.1: 未知风格
+  - -2.2: 未知风格
+  - -2.3: 未知风格
+  - -2.4: 未知风格
+  - -1.1: 未知风格
+  - -1.2: 未知风格 (错误: 'python')
+  - -1.3: 未知风格 (错误: 'deadcode_cs')
+  - 0.4: ('aabb', 'typeAabb') (错误: cannot access local variable 'find_type' where it is not associated with a value)
+  - 0.6: ('aabb', '$aabb')
+  - 1.1: ('if/for/while {...}', 'if/for/while ...')
+  - 1.2: ('if/for/while ...', 'if/for/while {...}')
+  - 2.1: 未知风格
+  - 2.2: 未知风格
+  - 3.1: 未知风格
+  - 3.2: 未知风格
+  - 3.3: 未知风格
+  - 3.4: 未知风格
+  - 4.1: 未知风格
+  - 4.2: 未知风格
+  - 4.3: 未知风格
+  - 4.4: 未知风格
+  - 5.1: 未知风格
+  - 5.2: 未知风格
+  - 6.1: 未知风格
+  - 6.2: 未知风格
+  - 7.1: 未知风格 (错误: 'python')
+  - 7.2: 未知风格 (错误: 'python')
+  - 8.1: 未知风格 (错误: 'python')
+  - 8.2: 未知风格 (错误: 'python')
+  - 9.1: 未知风格 (错误: cannot access free variable 'check' where it is not associated with a value in enclosing scope)
+  - 9.2: 未知风格 (错误: cannot access free variable 'check' where it is not associated with a value in enclosing scope)
+  - 10.0: 未知风格
+  - 10.1: 未知风格 (错误: 'python')
+  - 10.2: 未知风格 (错误: 'python')
+  - 10.3: 未知风格 (错误: 'python')
+  - 10.4: 未知风格 (错误: 'python')
+  - 10.5: 未知风格 (错误: 'python')
+  - 10.6: 未知风格 (错误: 'python')
+  - 10.7: 未知风格 (错误: 'python')
+  - 11.1: 未知风格
+  - 11.2: 未知风格 (错误: 'python')
+  - 11.3: 未知风格 (错误: 'python')
+  - 11.4: 未知风格 (错误: 'python')
+  - 12.1: 未知风格 (错误: 'finite_for')
+  - 12.2: 未知风格 (错误: 'infinite_for')
+  - 12.3: 未知风格 (错误: 'finite_while')
+  - 12.4: 未知风格 (错误: 'python')
+  - 13.1: 未知风格 (错误: not enough values to unpack (expected 3, got 2))
+  - 13.2: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 14.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 14.2: 未知风格
+  - 15.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 15.2: 未知风格 (错误: not enough values to unpack (expected 3, got 2))
+  - 16.1: 未知风格
+  - 16.2: 未知风格 (错误: 'python')
+  - 17.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 17.2: 未知风格
+  - 18.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 18.2: 未知风格 (错误: not enough values to unpack (expected 3, got 2))
+
+------------------------------------------------------------
+
+语言: java
+测试文件: /home/nfs/u2023-zlb/FABE/IST/test_code/test2.java
+总测试数: 65
+成功数: 38
+失败数: 27
+成功率: 58.46%
+
+成功风格:
+  - -1.1: 未知风格
+  - -1.2: 未知风格
+  - 0.0: 未知风格
+  - 0.1: ('aabb', 'aaBb')
+  - 0.2: ('aabb', 'AaBb')
+  - 0.3: ('aabb', 'aa_bb')
+  - 0.4: ('aabb', 'typeAabb')
+  - 0.5: ('aabb', '_aabb')
+  - 0.6: ('aabb', '$aabb')
+  - 2.1: 未知风格
+  - 2.2: 未知风格
+  - 3.1: 未知风格
+  - 3.2: 未知风格
+  - 3.3: 未知风格
+  - 3.4: 未知风格
+  - 4.1: 未知风格
+  - 4.2: 未知风格
+  - 4.3: 未知风格
+  - 4.4: 未知风格
+  - 7.2: 未知风格
+  - 8.1: 未知风格
+  - 9.1: 未知风格
+  - 9.2: 未知风格
+  - 10.0: 未知风格
+  - 10.1: 未知风格
+  - 10.2: 未知风格
+  - 10.3: 未知风格
+  - 10.4: 未知风格
+  - 10.5: 未知风格
+  - 10.6: 未知风格
+  - 10.7: 未知风格
+  - 11.1: 未知风格
+  - 11.2: 未知风格
+  - 11.4: 未知风格
+  - 12.4: 未知风格
+  - 14.2: 未知风格
+  - 16.2: 未知风格
+  - 17.2: 未知风格
+
+失败风格:
+  - -3.1: 未知风格
+  - -2.1: 未知风格
+  - -2.2: 未知风格
+  - -2.3: 未知风格
+  - -2.4: 未知风格
+  - -1.3: 未知风格 (错误: 'deadcode_cs')
+  - 1.1: ('if/for/while {...}', 'if/for/while ...')
+  - 1.2: ('if/for/while ...', 'if/for/while {...}')
+  - 5.1: 未知风格
+  - 5.2: 未知风格
+  - 6.1: 未知风格
+  - 6.2: 未知风格
+  - 7.1: 未知风格
+  - 8.2: 未知风格
+  - 11.3: 未知风格
+  - 12.1: 未知风格 (错误: 'finite_for')
+  - 12.2: 未知风格 (错误: 'infinite_for')
+  - 12.3: 未知风格 (错误: 'finite_while')
+  - 13.1: 未知风格 (错误: not enough values to unpack (expected 3, got 2))
+  - 13.2: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 14.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 15.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 15.2: 未知风格 (错误: not enough values to unpack (expected 3, got 2))
+  - 16.1: 未知风格
+  - 17.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 18.1: 未知风格 (错误: not enough values to unpack (expected 3, got 0))
+  - 18.2: 未知风格 (错误: not enough values to unpack (expected 3, got 2))
+
+------------------------------------------------------------
+
+总体统计:
+==============================
+总测试数: 195
+总成功数: 86
+总失败数: 109
+总成功率: 44.10%

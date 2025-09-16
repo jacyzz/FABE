@@ -54,21 +54,25 @@ class TunaTrainer(Trainer):
         )  # bs, num_cand, seq_len-1
         token_lprobs = (lprobs * label_mask[:, :, 1:].type_as(lprobs)).sum(
             dim=-1
-        ) / label_mask[:, :, 1:].sum(dim=-1).type_as(
-            lprobs
         )  # bs, num_cand
-        loss = 0
+        
+        # Vectorized implementation of margin ranking loss
+        # This ensures the computation graph is not broken
+        ranking_loss = 0
         for i in range(1, num_cand):
             pos_scores = token_lprobs[:, :-i]
             neg_scores = token_lprobs[:, i:]
-            pos_scores = pos_scores.contiguous().view(-1)
-            neg_scores = neg_scores.contiguous().view(-1)
-            ones = torch.ones_like(pos_scores)
-            loss_fn = nn.MarginRankingLoss(self.margin * i)
-            loss += loss_fn(pos_scores, neg_scores, ones)
-        # print("-----------------------------------------------------------")
-        # print(output.loss,loss)
+            
+            # The core formula for margin ranking loss is max(0, - (pos_scores - neg_scores) + margin)
+            # We use F.relu which is equivalent to max(0, x)
+            margin = self.margin * i
+            loss_per_pair = F.relu(neg_scores - pos_scores + margin)
+            ranking_loss += loss_per_pair.mean()
 
-        loss = self.mle_weight * output.loss + loss
+        # Normalize the ranking loss by the number of comparisons
+        if num_cand > 1:
+            ranking_loss = ranking_loss / (num_cand - 1)
 
-        return loss
+        final_loss = self.mle_weight * output.loss + ranking_loss
+
+        return final_loss

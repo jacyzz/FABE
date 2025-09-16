@@ -21,29 +21,42 @@ def get_indent(start_byte, code):
 
 def match_ifforwhile_has_bracket(root):
     lang = get_lang()
-    block_mp = {"c": "compound_statement", "java": "block"}
+    block_mp = {"c": "compound_statement", "java": "block", "python": "block"}
 
     def check(u):
-        if (
-            u.type
-            in ["while_statement", "if_statement", "for_statement", "else_clause"]
-            and "{" in text(u)
-            and "}" in text(u)
-        ):
+        # 支持的控制流语句类型
+        control_statements = ["while_statement", "if_statement", "for_statement", "else_clause"]
+        if get_lang() == "python":
+            # Python使用缩进而不是大括号，需要不同的检测逻辑
+            if u.type in control_statements:
+                # 对于Python，检查是否只有单个语句
+                pass  # 继续执行下面的检查逻辑
+        else:
+            # C/Java使用大括号
+            if not (u.type in control_statements and "{" in text(u) and "}" in text(u)):
+                return False
+        
+        if u.type in control_statements:
             count = -1
             for v in u.children:
                 if v.type == block_mp[lang]:
                     count = 0
                     for p in v.children:
-                        if p.type in [
+                        # 支持的语句类型（C, Java, Python）
+                        supported_statements = [
                             "expression_statement",
-                            "return_statement",
+                            "return_statement", 
                             "compound_statement",
                             "break_statement",
                             "for_statement",
-                            "if_statement",
+                            "if_statement", 
                             "while_statement",
-                        ]:
+                            # Python特有语句类型
+                            "assignment",
+                            "print_statement",
+                            "continue_statement",
+                        ]
+                        if p.type in supported_statements:
                             count += 1
             if -1 < count <= 1:
                 return True
@@ -66,13 +79,15 @@ def match_ifforwhile_hasnt_bracket(root):
 
     def match(u):
         if not get_expand():
-            if (
-                u.type
-                in ["while_statement", "if_statement", "for_statement", "else_clause"]
-                and "{" not in text(u)
-                and "}" not in text(u)
-            ):
-                # print(text(u))
+            control_statements = ["while_statement", "if_statement", "for_statement", "else_clause"]
+            # 统一计算匹配条件，避免在不匹配时提前return导致跳过子树
+            if get_lang() == "python":
+                cond = u.type in control_statements
+            else:
+                # C/Java: 无大括号
+                cond = (u.type in control_statements and "{" not in text(u) and "}" not in text(u))
+
+            if cond:
                 res.append(u)
 
         elif get_expand():
@@ -104,8 +119,32 @@ def match_ifforwhile_hasnt_bracket(root):
 def convert_del_ifforwhile_bracket(node, code):
     # Remove braces in single line If, For, While
     lang = get_lang()
-    block_mp = {"c": "compound_statement", "java": "block"}
+    block_mp = {"c": "compound_statement", "java": "block", "python": "block"}
     statement_node = None
+    # Python: 将多行缩进块折叠为单行语句
+    if lang == "python":
+        contents = text(node)
+        if "\n" not in contents:
+            return
+        # 形如: "if cond:\n    stmt" -> "if cond: stmt"
+        lines = contents.splitlines()
+        if len(lines) < 2:
+            return
+        head = lines[0]
+        # 找到第一条非空语句行
+        stmt_line = ""
+        for ln in lines[1:]:
+            if ln.strip():
+                stmt_line = ln.strip()
+                break
+        if not stmt_line:
+            return
+        new_contents = f"{head} {stmt_line}"
+        return [
+            (node.end_byte, node.start_byte),
+            (node.start_byte, new_contents),
+        ]
+
     for u in node.children:
         if u.type == block_mp[lang]:
             statement_node = u
@@ -137,6 +176,22 @@ def convert_add_ifforwhile_bracket(node, code):
         ]
     # Add braces to single line If, For, While
     statement_node = None
+    if get_lang() == "python":
+        # Python: 将单行 if/for/while 扩展为多行缩进块
+        contents = text(node)
+        if "\n" in contents:
+            return
+        # 按第一个冒号分割
+        if ":" not in contents:
+            return
+        head, tail = contents.split(":", 1)
+        tail_stmt = tail.strip()
+        indent = get_indent(node.start_byte, code)
+        new_contents = f"{head}:\n{(indent + 4) * ' '}{tail_stmt}"
+        return [
+            (node.end_byte, node.start_byte),
+            (node.start_byte, new_contents),
+        ]
     for each in node.children:
         if each.type in [
             "expression_statement",
@@ -170,7 +225,7 @@ def convert_add_ifforwhile_bracket(node, code):
 def count_has_ifforwhile_bracket(root):
     if get_expand():
         lang = get_lang()
-        block_mp = {"c": "compound_statement", "java": "block"}
+        block_mp = {"c": "compound_statement", "java": "block", "python": "block"}
 
         def check(u):
             if u.type == block_mp[lang] and u.parent.type != "method_declaration":

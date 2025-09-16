@@ -363,6 +363,13 @@ def convert_hungarian(node):  # intAabb
                     _type.append(text(u.parent.children[0]))
             for v in u.children:
                 find_type(v)
+    
+    elif lang == "python":
+        # Python is dynamically typed, Hungarian notation is not applicable
+        def find_type(u):
+            # Return generic prefix for Python
+            _type.append("obj")
+            return
 
     def find_root(u):
         root = None
@@ -411,6 +418,11 @@ def count_hungarian(root):
                 _type.append(text(u.parent.parent.children[0]))
             for v in u.children:
                 find_type(v)
+                
+    elif lang == "python":
+        def find_type(u):
+            _type.append("obj")  # Generic prefix for Python
+            return
 
     nodes = match_identifier(root)
     res = 0

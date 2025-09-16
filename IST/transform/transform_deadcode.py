@@ -11,7 +11,7 @@ def match_function(root):
         "c": "function_definition",
         "java": "method_declaration",
         "c_sharp": "local_function_statement",
-        "python": "module",
+        "python": "function_definition",
     }
 
     def check(u):
@@ -44,19 +44,29 @@ def convert_deadcode1(node, code):
         return
     if get_lang() == "c":
         deadcode = 'if (1 == -1) { printf("INFO Test message:aaaaa");}'
-    if get_lang() == "java":
+    elif get_lang() == "java":
         deadcode = 'if (1 == -1) { System.out.println("INFO Test message:aaaaa");}'
     elif get_lang() == "c_sharp":
         deadcode = 'if (1 == -1) { Console.WriteLine("INFO Test message:aaaaa");}'
     elif get_lang() == "python":
         deadcode = 'if 1 == -1: print("INFO Test message:aaaaa")'
-    indent = get_indent(block_node.children[1].start_byte, code)
-    return [(block_node.children[0].end_byte, f"\n{' '*indent}{deadcode}")]
+    # 安全地访问children，Python的block结构可能不同
+    if len(block_node.children) > 1:
+        indent = get_indent(block_node.children[1].start_byte, code)
+        return [(block_node.children[0].end_byte, f"\n{' '*indent}{deadcode}")]
+    elif len(block_node.children) > 0:
+        # 如果只有一个child，用它的end_byte
+        indent = get_indent(block_node.start_byte, code)
+        return [(block_node.children[0].end_byte, f"\n{' '*indent}{deadcode}")]
+    else:
+        # 如果没有children，用block本身的位置
+        indent = get_indent(block_node.start_byte, code)
+        return [(block_node.start_byte, f"{deadcode}\n")]
 
 
 def convert_deadcode2(node, code):
     block_node = None
-    block_mapping = {"c": "compound_statement", "java": "block", "c_sharp": "block"}
+    block_mapping = {"c": "compound_statement", "java": "block", "c_sharp": "block", "python": "block"}
     for u in node.children:
         if u.type == block_mapping[get_lang()]:
             block_node = u
@@ -69,8 +79,20 @@ def convert_deadcode2(node, code):
         deadcode = "Console.WriteLine(233);"
     elif get_lang() == "c":
         deadcode = 'printf("233\n");'
-    indent = get_indent(block_node.children[1].start_byte, code)
-    return [(block_node.children[0].end_byte, f"\n{' '*indent}{deadcode}")]
+    elif get_lang() == "python":
+        deadcode = 'print("233")'
+    # 安全地访问children，Python的block结构可能不同
+    if len(block_node.children) > 1:
+        indent = get_indent(block_node.children[1].start_byte, code)
+        return [(block_node.children[0].end_byte, f"\n{' '*indent}{deadcode}")]
+    elif len(block_node.children) > 0:
+        # 如果只有一个child，用它的end_byte
+        indent = get_indent(block_node.start_byte, code)
+        return [(block_node.children[0].end_byte, f"\n{' '*indent}{deadcode}")]
+    else:
+        # 如果没有children，用block本身的位置
+        indent = get_indent(block_node.start_byte, code)
+        return [(block_node.start_byte, f"{deadcode}\n")]
 
 
 def count_deadcode1(root):

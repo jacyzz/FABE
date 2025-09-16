@@ -136,7 +136,7 @@ class IST:
         }
 
         self.need_bracket = ["10", "11", "12", "17"]
-        self.exclude = {"java": ["5", "6"], "c": [], "c_sharp": [], "python": []}
+        self.exclude = {"java": ["5", "6"], "c": [], "c_sharp": [], "python": ["5", "6", "13"]}
 
     def transfer(self, styles=[], code=""):
         orig_code = code

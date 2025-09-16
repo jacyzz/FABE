@@ -1,8 +1,8 @@
 from ist_utils import text, get_indent
 from transform.lang import get_lang
 
-declaration_map = {"c": "declaration", "java": "local_variable_declaration"}
-block_map = {"c": "compound_statement", "java": "block"}
+declaration_map = {"c": "declaration", "java": "local_variable_declaration", "python": "assignment"}
+block_map = {"c": "compound_statement", "java": "block", "python": "block"}
 
 
 def get_for_info(node):

@@ -137,7 +137,7 @@ def run_test(language, test_file_path, output_dir):
 
 def generate_report(all_results, output_dir):
     """生成测试报告"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d_%H-%M-%S")
     report_file = os.path.join(output_dir, f"test_report_{timestamp}.json")
     summary_file = os.path.join(output_dir, f"test_summary_{timestamp}.txt")
     

@@ -20,7 +20,7 @@ def get_indent(start_byte, code):
 
 
 def match_switch(root):
-    switch_mapping = {"c": "switch_statement", "java": "switch_expression"}
+    switch_mapping = {"c": "switch_statement", "java": "switch_expression", "python": "match_statement"}
 
     def check(node):
         if node.type != switch_mapping[get_lang()]:

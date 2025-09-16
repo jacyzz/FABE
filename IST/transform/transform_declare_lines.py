@@ -8,6 +8,7 @@ def get_declare_info(node):
     variable_declaration_map = {
         "c": "declaration",
         "java": "local_variable_declaration",
+        "python": "assignment",  # Python uses assignment for variable declaration
     }
     type_ids_dict, type_dec_node = {}, {}
     for child in node.children:
@@ -28,7 +29,7 @@ def contain_id(node, contain):
     if node.child_by_field_name("index"):  # index in a[i] < 2: i
         contain.add(text(node.child_by_field_name("index")))
     lang = get_lang()
-    _map = {"c": ["init_declarator", "declaration"], "java": ["variable_declarator"]}
+    _map = {"c": ["init_declarator", "declaration"], "java": ["variable_declarator"], "python": ["assignment"]}
     # if node.type == 'identifier' and \
     #     node.parent.type in _map[lang] and \
     #     len(node.parent.children) >= 3 and \
@@ -47,6 +48,7 @@ def get_id_first_line(node):
     variable_declaration_map = {
         "c": "declaration",
         "java": "local_variable_declaration",
+        "python": "assignment",  # Python uses assignment for variable declaration
     }
     first_declare, first_use = {}, {}
     for child in node.children:
@@ -74,6 +76,7 @@ def match_lines_merge(root):
     variable_declaration_map = {
         "c": "declaration",
         "java": "local_variable_declaration",
+        "python": "assignment",  # Python uses assignment for variable declaration
     }
 
     def check(node):
@@ -102,6 +105,7 @@ def match_lines_split(root):
     variable_declaration_map = {
         "c": "declaration",
         "java": "local_variable_declaration",
+        "python": "assignment",  # Python uses assignment for variable declaration
     }
 
     def check(node):

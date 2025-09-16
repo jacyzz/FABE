@@ -5,7 +5,7 @@ from transform.lang import get_lang
 def get_declare_info(node):
     # Returns all types of variable names in the node code block and the node dictionary
     type_ids_dict, type_dec_node = {}, {}
-    declaration_map = {"c": "declaration", "java": "local_variable_declaration"}
+    declaration_map = {"c": "declaration", "java": "local_variable_declaration", "python": "assignment"}
     lang = get_lang()
     for child in node.children:
         if child.type == declaration_map[lang]:
@@ -38,7 +38,7 @@ def contain_id(node, contain):
 def get_id_first_line(node):
     # Get the line number where all variables are first declared and used in the node code block
     first_declare, first_use = {}, {}
-    declaration_map = {"c": "declaration", "java": "local_variable_declaration"}
+    declaration_map = {"c": "declaration", "java": "local_variable_declaration", "python": "assignment"}
     lang = get_lang()
     for child in node.children:
         if child.type == declaration_map[lang]:
@@ -76,8 +76,8 @@ def get_indent(start_byte, code):
 
 
 def match_not_first(root):
-    block_map = {"c": "compound_statement", "java": "block"}
-    declaration_map = {"c": "declaration", "java": "local_variable_declaration"}
+    block_map = {"c": "compound_statement", "java": "block", "python": "block"}
+    declaration_map = {"c": "declaration", "java": "local_variable_declaration", "python": "assignment"}
     lang = get_lang()
 
     def check(node):
@@ -105,7 +105,7 @@ def match_not_first(root):
 
 
 def match_not_tmp(root):
-    block_map = {"c": "compound_statement", "java": "block"}
+    block_map = {"c": "compound_statement", "java": "block", "python": "block"}
     lang = get_lang()
 
     def check(node):
@@ -165,7 +165,7 @@ def convert_temp(node, code):
         if id in first_use and first_use[id] != dec + 1:
             temp_id.append(id)
     id_type_dict = {}
-    declaration_map = {"c": "declaration", "java": "local_variable_declaration"}
+    declaration_map = {"c": "declaration", "java": "local_variable_declaration", "python": "assignment"}
     for child in node.children:
         if child.type == declaration_map[get_lang()]:
             type = text(child.children[0])

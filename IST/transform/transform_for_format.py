@@ -5,8 +5,9 @@ declaration_map = {
     "c": "declaration",
     "java": "local_variable_declaration",
     "c_sharp": "local_variable_declaration",
+    "python": "assignment",
 }
-block_map = {"c": "compound_statement", "java": "block", "c_sharp": "block"}
+block_map = {"c": "compound_statement", "java": "block", "c_sharp": "block", "python": "block"}
 
 
 def get_for_info(node):

@@ -89,6 +89,14 @@ def match_assign_merge(root):
                     if child.type == "init_declarator":
                         return True
             return False
+            
+    elif get_lang() == "python":
+
+        def check(node):
+            # Python assignment statements: x = value
+            if node.type == "assignment":
+                return True
+            return False
 
     res = []
 
@@ -134,6 +142,15 @@ def match_assign_split(root):
                     if child.type == "variable_declarator" and len(child.children) == 3:
                         return False
                 return True
+            return False
+            
+    elif get_lang() == "python":
+
+        def check(node):
+            # Python simple variable declarations (without assignment)
+            if node.type == "expression_statement" and len(node.children) == 1:
+                if node.children[0].type == "identifier":
+                    return True
             return False
 
     res = []

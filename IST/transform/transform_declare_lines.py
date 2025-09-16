@@ -80,11 +80,26 @@ def match_lines_merge(root):
     }
 
     def check(node):
-        # int a, b=0;
-        if node.type == variable_declaration_map[lang]:
-            ids = set()
-            contain_id(node, ids)
-            return len(ids) > 1
+        # C/Java: 一行多变量声明
+        if lang in ["c", "java"]:
+            if node.type == variable_declaration_map[lang]:
+                ids = set()
+                contain_id(node, ids)
+                return len(ids) > 1
+        # Python: 在一个 block 中存在至少两条连续的简单赋值（a = x; b = y）
+        if lang == "python" and node.type in ["block", "module"]:
+            prev_is_simple = False
+            for ch in node.children:
+                if ch.type == "expression_statement" and len(ch.children) == 1 and ch.children[0].type == "assignment":
+                    s = text(ch.children[0])
+                    if "=" in s:
+                        lhs, rhs = s.split("=", 1)
+                        is_simple = "," not in lhs and "," not in rhs
+                        if prev_is_simple and is_simple:
+                            return True
+                        prev_is_simple = is_simple
+                        continue
+                prev_is_simple = False
         return False
 
     res = []
@@ -109,14 +124,30 @@ def match_lines_split(root):
     }
 
     def check(node):
-        # int a; \n int b=0;
-        type_list = set()
-        for child in node.children:
-            if child.type == variable_declaration_map[lang]:
-                type = text(child.children[0])
-                if type in type_list:
-                    return True
-                type_list.add(type)
+        # C/Java: 存在相同类型的多行声明，可合并
+        if lang in ["c", "java"]:
+            type_list = set()
+            for child in node.children:
+                if child.type == variable_declaration_map[lang]:
+                    type = text(child.children[0])
+                    if type in type_list:
+                        return True
+                    type_list.add(type)
+            return False
+        # Python: 在一个 block/module 中存在至少两条连续的简单赋值（a = x; b = y）可合并
+        if lang == "python" and node.type in ["block", "module"]:
+            prev_is_simple = False
+            for ch in node.children:
+                if ch.type == "expression_statement" and len(ch.children) == 1 and ch.children[0].type == "assignment":
+                    s = text(ch.children[0])
+                    if "=" in s:
+                        lhs, rhs = s.split("=", 1)
+                        is_simple = "," not in lhs and "," not in rhs
+                        if prev_is_simple and is_simple:
+                            return True
+                        prev_is_simple = is_simple
+                        continue
+                prev_is_simple = False
         return False
 
     res = []
@@ -152,18 +183,47 @@ def count_lines_split(root):
 
 
 def convert_lines_merge(node, code):
-    # int a; int b; -> int a, b;
-    ret = []
-    indent = get_indent(node.children[1].start_byte, code)
-    type_ids_dict, type_dec_node = get_declare_info(node)
-    for type, ids in type_ids_dict.items():
-        if len(ids) > 1:
-            start_byte = type_dec_node[type][0].start_byte
-            for node in type_dec_node[type]:
-                ret.append((node.end_byte, node.start_byte))
-            str = f"{type} {', '.join(type_ids_dict[type])};"
-            ret.append((start_byte, str))
-    return ret
+    # C/Java: int a; int b; -> int a, b;
+    if get_lang() in ["c", "java"]:
+        ret = []
+        indent = get_indent(node.children[1].start_byte, code)
+        type_ids_dict, type_dec_node = get_declare_info(node)
+        for type, ids in type_ids_dict.items():
+            if len(ids) > 1:
+                start_byte = type_dec_node[type][0].start_byte
+                for node in type_dec_node[type]:
+                    ret.append((node.end_byte, node.start_byte))
+                str = f"{type} {', '.join(type_ids_dict[type])};"
+                ret.append((start_byte, str))
+        return ret
+    # Python: a = x; b = y; -> a, b = x, y  （仅合并第一处连续片段）
+    elif get_lang() == "python":
+        # 找到第一组连续简单赋值
+        stmts = node.children
+        group = []
+        for ch in stmts:
+            if ch.type == "expression_statement" and len(ch.children) == 1 and ch.children[0].type == "assignment":
+                s = text(ch.children[0])
+                if "=" in s:
+                    lhs, rhs = s.split("=", 1)
+                    if "," not in lhs and "," not in rhs:
+                        group.append((ch, lhs.strip(), rhs.strip()))
+                        continue
+            if len(group) >= 2:
+                break
+            group = []
+        if len(group) < 2:
+            return
+        start = group[0][0].start_byte
+        end = group[-1][0].end_byte
+        indent = get_indent(start, code)
+        left = ", ".join([a for _, a, _ in group])
+        right = ", ".join([b for _, _, b in group])
+        merged = f"{indent*' '}{left} = {right}"
+        return [
+            (end, start),
+            (start, merged),
+        ]
 
 
 def count_lines_merge(root):

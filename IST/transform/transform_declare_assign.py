@@ -93,10 +93,8 @@ def match_assign_merge(root):
     elif get_lang() == "python":
 
         def check(node):
-            # Python assignment statements: x = value
-            if node.type == "assignment":
-                return True
-            return False
+            # Python: 针对 9.1（split）匹配 assignment，包括多目标赋值与简单赋值
+            return node.type == "assignment"
 
     res = []
 
@@ -146,12 +144,27 @@ def match_assign_split(root):
             
     elif get_lang() == "python":
 
+        def is_simple_assign(node):
+            s = text(node)
+            if "=" not in s:
+                return False
+            lhs, rhs = s.split("=", 1)
+            return "," not in lhs and "," not in rhs
+
         def check(node):
-            # Python simple variable declarations (without assignment)
-            if node.type == "expression_statement" and len(node.children) == 1:
-                if node.children[0].type == "identifier":
-                    return True
-            return False
+            # Python: 针对 9.2（merge）匹配“可与下一条简单赋值合并”的第一条 assignment
+            if node.type != "assignment":
+                return False
+            expr_stmt = node.parent
+            if expr_stmt is None or expr_stmt.type != "expression_statement":
+                return False
+            ns = expr_stmt.next_sibling
+            if ns is None or ns.type != "expression_statement" or len(ns.children) == 0:
+                return False
+            nxt = ns.children[0]
+            if nxt.type != "assignment":
+                return False
+            return is_simple_assign(node) and is_simple_assign(nxt)
 
     res = []
 
@@ -166,7 +179,7 @@ def match_assign_split(root):
 
 
 def convert_assign_split(node, code):
-    # int i = 0; -> int i; \n i = 0;
+    # int i = 0; -> int i; \n i = 0;  |  Python: a, b = x, y -> a = x; \n b = y
     if node.parent.type == "for_statement":
         return
     ret = []
@@ -217,6 +230,26 @@ def convert_assign_split(node, code):
                         f"\n{indent*' '}{text(declarator)} = {text(value)};",
                     )
                 )
+    elif get_lang() == "python":
+        s = text(node)
+        if "=" not in s:
+            return
+        lhs, rhs = s.split("=", 1)
+        lefts = [x.strip() for x in lhs.split(",")]
+        rights = [x.strip() for x in rhs.split(",")]
+        if len(lefts) != len(rights) or len(lefts) < 2:
+            return
+        indent = get_indent(node.start_byte, code)
+        # 删除原句
+        ret.append((node.end_byte, node.start_byte))
+        # 逐行插入
+        base = node.start_byte
+        lines = []
+        for l, r in zip(lefts, rights):
+            lines.append(f"{indent*' '}{l} = {r}")
+        new_block = ("\n".join(lines))
+        ret.append((base, new_block))
+        return ret
     return ret
 
 
@@ -226,32 +259,58 @@ def count_assign_split(root):
 
 
 def convert_assign_merge(node, code):
-    # int i; i = 0; -> int i = 0;
-    type_node = node.children[0]
-    var_node = node.children[1]
-    assign_nodes = []
+    # C/Java: int i; i = 0; -> int i = 0;
+    if get_lang() in ["c", "java", "c_sharp"]:
+        type_node = node.children[0]
+        var_node = node.children[1]
+        assign_nodes = []
 
-    def find_val_node(u):
-        if len(assign_nodes) >= 1:
+        def find_val_node(u):
+            if len(assign_nodes) >= 1:
+                return
+            if u.type == "assignment_expression" and text(u.children[0]) == text(var_node):
+                assign_nodes.append(u)
+                return
+            for v in u.children:
+                find_val_node(v)
+
+        find_val_node(node.parent)
+
+        if len(assign_nodes) == 0:
             return
-        if u.type == "assignment_expression" and text(u.children[0]) == text(var_node):
-            assign_nodes.append(u)
+        assign_node = assign_nodes[0]
+        val_node = assign_node.children[2]
+
+        return [
+            (node.end_byte, node.start_byte),
+            (assign_node.end_byte + 1, assign_node.start_byte),
+            (node.start_byte, f"{text(type_node)} {text(var_node)} = {text(val_node)};"),
+        ]
+    elif get_lang() == "python":
+        # 合并两条相邻的简单赋值：a = x \n b = y  ->  a, b = x, y
+        expr_stmt = node.parent
+        if expr_stmt is None or expr_stmt.type != "expression_statement":
             return
-        for v in u.children:
-            find_val_node(v)
-
-    find_val_node(node.parent)
-
-    if len(assign_nodes) == 0:
+        ns = expr_stmt.next_sibling
+        if ns is None or ns.type != "expression_statement" or len(ns.children) == 0:
+            return
+        nxt = ns.children[0]
+        s1 = text(node)
+        s2 = text(nxt)
+        if "=" not in s1 or "=" not in s2:
+            return
+        l1, r1 = [x.strip() for x in s1.split("=", 1)]
+        l2, r2 = [x.strip() for x in s2.split("=", 1)]
+        if "," in l1 or "," in r1 or "," in l2 or "," in r2:
+            return
+        indent = get_indent(expr_stmt.start_byte, code)
+        merged = f"{indent*' '}{l1}, {l2} = {r1}, {r2}"
+        return [
+            (ns.end_byte, expr_stmt.start_byte),
+            (expr_stmt.start_byte, merged),
+        ]
+    else:
         return
-    assign_node = assign_nodes[0]
-    val_node = assign_node.children[2]
-
-    return [
-        (node.end_byte, node.start_byte),
-        (assign_node.end_byte + 1, assign_node.start_byte),
-        (node.start_byte, f"{text(type_node)} {text(var_node)} = {text(val_node)};"),
-    ]
 
 
 def count_assign_merge(root):

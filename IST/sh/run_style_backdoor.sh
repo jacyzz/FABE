@@ -4,11 +4,11 @@
 # 使用IST风格转换生成后门清洗数据集
 
 # 默认参数
-INPUT_PATH="/home/nfs/u2023-zlb/datasets/clone-dectect/filtered/train-00002-of-00006.jsonl"
-OUTPUT_PATH="/home/nfs/share-yjy/dachuang2025/data/fabe/PRO/cd_train3.jsonl"
-LANGUAGE="java"
-METHOD="clone"
-DATANAME="clone_detect"
+INPUT_PATH="/home/nfs/share-yjy/dachuang2025/data/Code_Search/CodeSearchNet/python/train.jsonl"
+OUTPUT_PATH="/home/nfs/share-yjy/dachuang2025/data/fabe/PRO/csn_train.jsonl"
+LANGUAGE="python"
+METHOD="partial_fix"
+DATANAME="CSN"
 LIMIT=0
 INSTRUCTION=""
 

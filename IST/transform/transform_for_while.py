@@ -282,6 +282,25 @@ def count_while(root):
 
 def convert_do_while(node, code):
     node_info = defaultdict(type(node))
+    if get_lang() == "python" and node.type == "while_statement":
+        # Python 11.3 等价： while(cond): BODY  ->  while True: BODY; if not cond: break
+        cond = node.child_by_field_name("condition") if hasattr(node, 'child_by_field_name') else None
+        body = None
+        for c in node.children:
+            if c.type == block_map[get_lang()]:
+                body = c
+                break
+        if cond is None or body is None:
+            return
+        indent = get_indent(body.start_byte, code)
+        tail = f"\n{indent*' '}if not {text(cond)}: break"
+        return [
+            # 替换 while <cond> 为 while True（保留后续冒号）
+            (cond.end_byte, node.children[0].start_byte),
+            (node.children[0].start_byte, "while True"),
+            (body.end_byte, body.end_byte),
+            (body.end_byte, tail),
+        ]
     if node.type == "for_statement":
         # a while(b) c
         res, add_bracket = [], None

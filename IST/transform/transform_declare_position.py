@@ -134,22 +134,51 @@ def match_not_tmp(root):
 
 def convert_first(node, code):
     # Put the variable name declaration at the front
-    ret = []
-    type_ids_dict, type_dec_node = get_declare_info(node)
-    indent = get_indent(node.children[1].start_byte, code)
-    start_byte = len(code)
-    for type, node in type_dec_node.items():
-        for each in node:
-            ret.append((each.end_byte, each.start_byte))
-            start_byte = min(start_byte, each.start_byte)
-    declare_list = []
-    for i, (type, ids) in enumerate(type_ids_dict.items()):
-        if i == 0:
-            declare_list.append(f"{type} {', '.join(ids)};")
-        else:
-            declare_list.append(f"{indent * ' '}{type} {', '.join(ids)};")
-    ret.append((start_byte, "\n".join(declare_list)))
-    return ret
+    if get_lang() in ["c", "java"]:
+        ret = []
+        type_ids_dict, type_dec_node = get_declare_info(node)
+        indent = get_indent(node.children[1].start_byte, code)
+        start_byte = len(code)
+        for type, node in type_dec_node.items():
+            for each in node:
+                ret.append((each.end_byte, each.start_byte))
+                start_byte = min(start_byte, each.start_byte)
+        declare_list = []
+        for i, (type, ids) in enumerate(type_ids_dict.items()):
+            if i == 0:
+                declare_list.append(f"{type} {', '.join(ids)};")
+            else:
+                declare_list.append(f"{indent * ' '}{type} {', '.join(ids)};")
+        ret.append((start_byte, "\n".join(declare_list)))
+        return ret
+    elif get_lang() == "python":
+        # 保守版：将连续的简单赋值（a = x）移动到 block 顶部
+        block = node
+        stmts = block.children
+        simple = []
+        others = []
+        for ch in stmts:
+            if ch.type == "expression_statement" and len(ch.children) == 1 and ch.children[0].type == "assignment":
+                s = text(ch.children[0])
+                if "=" in s:
+                    lhs, rhs = s.split("=", 1)
+                    if "," not in lhs and "," not in rhs:
+                        simple.append(ch)
+                        continue
+            others.append(ch)
+        if len(simple) <= 1:
+            return
+        indent = get_indent(block.start_byte, code)
+        head = simple[0].start_byte
+        tail = simple[-1].end_byte
+        new_head = head
+        # 直接整体上移到块首
+        body = code[head:tail]
+        return [
+            (tail, head),
+            (block.children[0].end_byte, block.children[0].end_byte),
+            (block.children[0].end_byte, "\n" + body),
+        ]
 
 
 def count_first(root):

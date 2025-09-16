@@ -2,6 +2,7 @@ import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from ist_utils import text
+from transform.lang import get_lang
 import random
 
 record = {}
@@ -10,16 +11,44 @@ record = {}
 def match_tokensub_identifier(root, select=True):
     parameter_declaration_sons = {}
 
-    def check(node):
-        if node.type == "identifier":
-            if node.parent.type == "function_declarator":
+    lang = get_lang()
+
+    if lang == "python":
+        # Python: 仅选择函数形参标识符，避免重命名函数、属性、模块名等
+        def check(node):
+            if node.type != "identifier":
                 return False
-            if node.parent.type == "call_expression":
+            p = node.parent
+            # 排除函数/类名、调用、属性、导入
+            if p.type in [
+                "function_definition",
+                "class_definition",
+                "call",
+                "attribute",
+                "import_statement",
+                "import_from_statement",
+                "aliased_import",
+            ]:
                 return False
-            if node.parent.type == "parameter_declaration":
-                parameter_declaration_sons[text(node)] = True
+            # 收集形参
+            u = node
+            while u is not None:
+                if u.type == "parameters":
+                    parameter_declaration_sons[text(node)] = True
+                    break
+                u = u.parent
             return True
-        return False
+    else:
+        def check(node):
+            if node.type == "identifier":
+                if node.parent.type == "function_declarator":
+                    return False
+                if node.parent.type == "call_expression":
+                    return False
+                if node.parent.type == "parameter_declaration":
+                    parameter_declaration_sons[text(node)] = True
+                return True
+            return False
 
     res = []
 

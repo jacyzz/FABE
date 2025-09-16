@@ -136,7 +136,13 @@ class IST:
         }
 
         self.need_bracket = ["10", "11", "12", "17"]
-        self.exclude = {"java": ["5", "6"], "c": [], "c_sharp": [], "python": ["5", "6", "13"]}
+        # Python 排除 for_update(4.x) 与 for_format(10.x) 以避免不适用/不稳定
+        self.exclude = {
+            "java": ["5", "6"],
+            "c": [],
+            "c_sharp": [],
+            "python": ["4", "5", "6", "10", "13"],
+        }
 
     def transfer(self, styles=[], code=""):
         orig_code = code

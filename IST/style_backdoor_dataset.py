@@ -12,6 +12,11 @@ from typing import Dict, Any, List, Tuple, Optional
 
 sys.path.insert(0, os.path.dirname(__file__))
 from transfer import IST
+try:
+    from tqdm import tqdm
+except Exception:
+    def tqdm(iterable, **kwargs):
+        return iterable
 
 
 class StyleBackdoorGenerator:
@@ -22,7 +27,13 @@ class StyleBackdoorGenerator:
         self.ist = IST(language)
         
         # 指定的风格列表
-        self.poison_styles = ['-1.1', '-3.1', '0.5', '7.2', '8.1', '9.1', '11.3', '3.4', '4.4', '10.7']
+        base_poison = ['-1.1', '-3.1', '0.5', '7.2', '8.1', '9.1', '11.3', '3.4', '4.4', '10.7']
+        # C/Java 增补 for/while 相关风格
+        if language in ['c', 'java']:
+            extra_loop = ['11.1', '11.2', '10.1', '10.3', '10.5', '4.1', '4.2', '4.3']
+            self.poison_styles = base_poison + extra_loop
+        else:
+            self.poison_styles = base_poison
         
         # 统一风格列表
         self.unify_styles = ['0.1', '0.2', '0.3', '3.3', '7.2', '9.1']
@@ -73,26 +84,52 @@ class StyleBackdoorGenerator:
         return code1, code2
     
     def apply_poison_styles(self, code: str, num_styles: int = None) -> Tuple[str, List[str], bool]:
-        """应用毒化风格转换"""
-        if num_styles is None:
-            num_styles = random.randint(1, 3)  # 1-3个风格
-        
-        # 随机选择风格
-        selected_styles = random.sample(self.poison_styles, min(num_styles, len(self.poison_styles)))
-        
+        """应用毒化风格转换：优先2-3种，尽量不同类别；若只成功1种则尝试补齐到2种。"""
+        # 目标风格数：优先2-3
+        target = num_styles if isinstance(num_styles, int) and num_styles > 0 else random.choice([2, 3])
+        pool = list(self.poison_styles)
+        random.shuffle(pool)
+
         current_code = code
-        applied_styles = []
-        
-        for style in selected_styles:
+        applied_styles: List[str] = []
+        used_groups = set()  # 按风格大类去重（如 '0','7','8','11' 等）
+
+        def can_pick(st: str) -> bool:
+            grp = st.split('.')[0]
+            return grp not in used_groups
+
+        # 第一轮：尝试达到目标数
+        for style in pool:
+            if len(applied_styles) >= target:
+                break
+            if not can_pick(style):
+                continue
             try:
                 transformed_code, success = self.ist.transfer(styles=[style], code=current_code)
                 if success and self.ist.check_syntax(transformed_code):
                     current_code = transformed_code
                     applied_styles.append(style)
+                    used_groups.add(style.split('.')[0])
             except Exception:
                 continue
-        
-        # 如果没有成功应用任何风格，至少尝试一个
+
+        # 补偿：若只成功1种且仍有可选，尝试补齐到2种
+        if len(applied_styles) == 1:
+            for style in pool:
+                if len(applied_styles) >= max(2, target):
+                    break
+                if style in applied_styles or not can_pick(style):
+                    continue
+                try:
+                    transformed_code, success = self.ist.transfer(styles=[style], code=current_code)
+                    if success and self.ist.check_syntax(transformed_code):
+                        current_code = transformed_code
+                        applied_styles.append(style)
+                        used_groups.add(style.split('.')[0])
+                except Exception:
+                    continue
+
+        # 兜底：如果没有成功应用任何风格，至少尝试一个
         if not applied_styles:
             for style in self.poison_styles:
                 try:
@@ -102,7 +139,7 @@ class StyleBackdoorGenerator:
                 except Exception:
                     continue
             return code, [], False
-        
+
         return current_code, applied_styles, True
     
     def apply_unify_styles(self, code: str) -> Tuple[str, List[str]]:
@@ -149,42 +186,85 @@ class StyleBackdoorGenerator:
         
         return code, []
     
-    def generate_partial_fix(self, poisoned_code: str, poison_styles: List[str]) -> str:
-        """生成部分修复的代码（移除部分风格影响）"""
-        if not poison_styles:
-            return poisoned_code
+    def _count_poison(self, code: str, styles_subset: List[str]) -> int:
+        """统计 code 中 styles_subset 的触发计数总和"""
+        if not styles_subset:
+            return 0
+        counts = self.ist.get_style(code=code, styles=styles_subset)
+        return sum(int(counts.get(s, 0)) for s in styles_subset)
+
+    def _cleanup_deadcode(self, code: str) -> str:
+        """清理我们注入的死代码，仅用于 partial_fix 反毒化轨"""
+        cleaned = code
+        try:
+            if self.language == 'python':
+                patterns = [
+                    'if 1 == -1: print("INFO Test message:aaaaa")',
+                    'print("233")',
+                ]
+            elif self.language == 'c':
+                patterns = [
+                    'if (1 == -1) { printf("INFO Test message:aaaaa");}',
+                    'printf("233\\n");',
+                ]
+            elif self.language == 'java':
+                patterns = [
+                    'if (1 == -1) { System.out.println("INFO Test message:aaaaa");}',
+                    'System.out.println(233);',
+                ]
+            else:
+                patterns = []
+            for p in patterns:
+                cleaned = cleaned.replace(p + "\n", "")
+                cleaned = cleaned.replace("\n" + p, "\n")
+                cleaned = cleaned.replace(p, "")
+        except Exception:
+            pass
+        return cleaned
+
+    def generate_partial_fix(self, clean_code: str, poisoned_input: str, poison_styles: List[str]) -> str:
+        """基于干净代码生成 y3，保证相较于 input 的毒化风格不增加（尽量减少）"""
+        # 基线：y3 至少等于 y1
+        best = clean_code
+        input_score = self._count_poison(poisoned_input, poison_styles)
+        best_score = self._count_poison(best, poison_styles)
         
-        # 随机选择要"修复"的风格数量（不全部修复）
-        num_to_fix = random.randint(1, max(1, len(poison_styles) - 1))
-        styles_to_reverse = random.sample(poison_styles, num_to_fix)
+        # 1) 反毒化轨：对 input 进行 deadcode 清理（若适用）
+        cleaned_input = self._cleanup_deadcode(poisoned_input)
+        if cleaned_input != poisoned_input and self.ist.check_syntax(cleaned_input):
+            ci_score = self._count_poison(cleaned_input, poison_styles)
+            if ci_score <= input_score and cleaned_input not in (clean_code, poisoned_input):
+                best = cleaned_input
+                best_score = ci_score
         
-        current_code = poisoned_code
-        
-        # 尝试应用相反或中和的风格
-        reverse_style_map = {
-            '-1.1': '1.1',  # dead code removal -> add braces
-            '-3.1': '3.1',  # backdoor removal -> add parentheses  
-            '0.5': '0.1',   # Hungarian -> camelCase
-            '7.2': '7.1',   # remove spaces -> add spaces
-            '8.1': '8.2',   # 声明相关
-            '9.1': '9.2',   # line break changes
-            '11.3': '11.1', # loop changes
-            '3.4': '3.3',   # parentheses
-            '4.4': '4.1',   # operators
-            '10.7': '10.1'  # other transforms
-        }
-        
-        for style in styles_to_reverse:
-            if style in reverse_style_map:
+        # 2) 中性统一轨：在 y1 和（若存在）cleaned_input 两个基线试不引入毒化标签的统一风格
+        neutral_styles = ['0.1', '0.2', '0.3', '3.3']
+        bases = [clean_code]
+        if cleaned_input not in (None, poisoned_input, clean_code):
+            bases.append(cleaned_input)
+        for st in random.sample(neutral_styles, k=min(len(neutral_styles), max(1, random.randint(1, len(neutral_styles))))):
+            for base in bases:
                 try:
-                    reverse_style = reverse_style_map[style]
-                    transformed_code, success = self.ist.transfer(styles=[reverse_style], code=current_code)
-                    if success and self.ist.check_syntax(transformed_code):
-                        current_code = transformed_code
+                    cand, ok = self.ist.transfer(styles=[st], code=base)
+                    if not ok or not self.ist.check_syntax(cand):
+                        continue
+                    cand_score = self._count_poison(cand, poison_styles)
+                    if cand_score <= input_score and cand_score <= best_score and cand not in (clean_code, poisoned_input):
+                        best = cand
+                        best_score = cand_score
+                        break
                 except Exception:
                     continue
         
-        return current_code
+        # 3) 结构替代轨：尝试 for/while/if 嵌套等结构替代（不引入已有 poison 标签）
+        alt, used = self.apply_for_while_transform(clean_code)
+        if alt != clean_code and self.ist.check_syntax(alt):
+            alt_score = self._count_poison(alt, poison_styles)
+            if alt_score <= input_score and alt_score <= best_score and alt not in (clean_code, poisoned_input):
+                best = alt
+                best_score = alt_score
+        
+        return best
     
     def build_dataset_row(self, obj: Dict[str, Any], dataset_name: str, method: str, instruction: str = "") -> Optional[Dict[str, Any]]:
         """构建数据集行"""
@@ -209,7 +289,8 @@ class StyleBackdoorGenerator:
             if method == "clone" and code2:
                 y3 = code2
             elif method == "partial_fix":
-                y3 = self.generate_partial_fix(poisoned_input, poison_tags)
+                # 基于干净代码生成，确保相较 input 的 poison 计数不增加
+                y3 = self.generate_partial_fix(y1, poisoned_input, poison_tags)
             elif method == "for_while":
                 y3, _ = self.apply_for_while_transform(code1)
             else:
@@ -251,14 +332,11 @@ class StyleBackdoorGenerator:
         output_rows = []
         processed_count = 0
         
-        for i, obj in enumerate(input_data):
+        for i, obj in enumerate(tqdm(input_data, desc="Generating", unit="sample")):
             row = self.build_dataset_row(obj, dataset_name, method, instruction)
             if row:
                 output_rows.append(row)
                 processed_count += 1
-            
-            if (i + 1) % 100 == 0:
-                print(f"Processed {i + 1}/{len(input_data)} samples, generated {processed_count} valid rows")
         
         # 写入输出
         self.write_jsonl(output_path, output_rows)

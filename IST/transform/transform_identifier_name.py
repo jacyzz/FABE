@@ -90,17 +90,22 @@ def match_identifier(root):
         def check(u):
             if u.type not in ["identifier"]:
                 return False
-            # Exclude function/class names, module names, and attributes from being renamed.
-            if u.parent.type in [
-                "function_definition", 
-                "class_definition", 
-                "call", 
+            # Exclude function/class names, module names, and any identifiers under imports/attributes
+            exclude_types = set([
+                "function_definition",
+                "class_definition",
+                "call",
                 "attribute",
                 "import_statement",
                 "import_from_statement",
-                "aliased_import"
-            ]:
-                return False
+                "aliased_import",
+                "dotted_name",
+            ])
+            p = u
+            while p is not None:
+                if p.type in exclude_types:
+                    return False
+                p = p.parent
             return True
 
     elif get_lang() == "c_sharp":

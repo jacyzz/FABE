@@ -14,6 +14,7 @@ from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConf
 from transformers.models.auto.modeling_auto import MODEL_MAPPING, AutoModelForCausalLM
 from transformers.utils.quantization_config import BitsAndBytesConfig
 from peft import get_peft_model, LoraConfig, TaskType
+from transformers import get_scheduler
 args = init_args()
 
 class ProcessManager():
@@ -24,7 +25,9 @@ class ProcessManager():
     ):
         self.accelerator = accelerator
         self.model_path = model_path
-        
+        # 提前初始化日志器，确保在LoRA恢复等分支中可用
+        self.logger = get_logger(__name__)
+
 
         # Set model config
         self.model_config = AutoConfig.from_pretrained(self.model_path)
@@ -85,15 +88,28 @@ class ProcessManager():
         
         # Add LoRA if enabled
         if args.use_lora:
-            lora_config = LoraConfig(
-                r=args.lora_r,
-                lora_alpha=args.lora_alpha, 
-                target_modules=args.lora_target_modules,
-                lora_dropout=args.lora_dropout,
-                bias="none",
-                task_type=TaskType.CAUSAL_LM
-            )
-            self.model = get_peft_model(self.model, lora_config)
+            # 若提供了resume_adapter_path，直接加载已训练的LoRA适配器；否则新建LoRA
+            if getattr(args, 'resume_adapter_path', None):
+                try:
+                    from peft import PeftModel
+                    self.model = PeftModel.from_pretrained(
+                        self.model,
+                        args.resume_adapter_path,
+                        is_trainable=True
+                    )
+                    self.logger.info(f"Resumed LoRA adapter from {args.resume_adapter_path}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to resume adapter from {args.resume_adapter_path}: {e}")
+            else:
+                lora_config = LoraConfig(
+                    r=args.lora_r,
+                    lora_alpha=args.lora_alpha, 
+                    target_modules=args.lora_target_modules,
+                    lora_dropout=args.lora_dropout,
+                    bias="none",
+                    task_type=TaskType.CAUSAL_LM
+                )
+                self.model = get_peft_model(self.model, lora_config)
             self.model.print_trainable_parameters()
         
         # 只扩不缩，避免与基座模型词表不一致导致 LoRA 适配器加载报错
@@ -101,7 +117,6 @@ class ProcessManager():
         vocab_size_tok = len(self.data_manager.tokenizer)
         if vocab_size_tok > vocab_size_model:
             self.model.resize_token_embeddings(vocab_size_tok)
-        self.logger = get_logger(__name__)
     
     def compute_loss(self, model, batch, print_loss):
         # 添加维度检查
@@ -316,8 +331,21 @@ class ProcessManager():
             args.max_train_steps = len(train_files) * num_update_steps_per_epoch_per_train_file * args.num_train_epochs
         
 
-        model, optimizer, _ = self.accelerator.prepare(
-            self.model, optimizer, placeholder_dataloader
+        # 创建学习率调度器（线性/余弦等，含 warmup）
+        if args.num_warmup_steps and args.num_warmup_steps > 0:
+            num_warmup_steps = args.num_warmup_steps
+        else:
+            num_warmup_steps = int(args.warmup_ratio * args.max_train_steps)
+
+        lr_scheduler = get_scheduler(
+            name=args.lr_scheduler_type,
+            optimizer=optimizer,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=args.max_train_steps,
+        )
+
+        model, optimizer, placeholder_dataloader, lr_scheduler = self.accelerator.prepare(
+            self.model, optimizer, placeholder_dataloader, lr_scheduler
         )
         # 不要将self.model设置为None，保持引用
 
@@ -329,7 +357,7 @@ class ProcessManager():
         self.logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}", main_process_only=True)
         self.logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}", main_process_only=True)
         
-        return model, optimizer, dataset_length
+        return model, optimizer, dataset_length, lr_scheduler
 
     def train(self):
         # 使用与 prepare_hfa_dataloader 和 init_prepare_train 相同的逻辑
@@ -363,7 +391,7 @@ class ProcessManager():
         
         train_file_name = None  # 不再需要单独的 train_file_name
             
-        model, optimizer, dataset_length = self.init_prepare_train(
+        model, optimizer, dataset_length, lr_scheduler = self.init_prepare_train(
             train_file_name = train_file_name
         )
         training_stage = args.training_stage_num
@@ -418,6 +446,7 @@ class ProcessManager():
                     with self.accelerator.accumulate(model):
                         self.compute_loss(model, batch, print_loss)
                         optimizer.step()
+                        lr_scheduler.step()
                         optimizer.zero_grad()
 
                     if self.accelerator.sync_gradients:

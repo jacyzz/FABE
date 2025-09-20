@@ -48,8 +48,21 @@ class Coding_DataManager():
         self.config = config
         self.task_type = task_type  # 保存任务类型
         
-        # LlamaTokenizer is deprecated. Use AutoTokenizer instead for consistency.
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=False)
+        # 优先从resume_adapter_path加载checkpoint内的tokenizer，避免vocab不一致；失败则回退到基座
+        preferred_paths = []
+        if getattr(args, 'resume_adapter_path', None):
+            preferred_paths.append(args.resume_adapter_path)
+        preferred_paths.append(tokenizer_path)
+        loaded = False
+        for path in preferred_paths:
+            try:
+                self.tokenizer = AutoTokenizer.from_pretrained(path, use_fast=False)
+                loaded = True
+                break
+            except Exception:
+                continue
+        if not loaded:
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=False)
         
         # Set pad token if it's not already set
         if self.tokenizer.pad_token is None:

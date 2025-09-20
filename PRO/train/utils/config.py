@@ -70,6 +70,25 @@ def parse_args():
         type=float,
         default=1e-6,
     )
+    # LR scheduler & warmup
+    parser.add_argument(
+        "--lr_scheduler_type",
+        type=str,
+        default="linear",
+        help="Scheduler type: linear, cosine, cosine_with_restarts, polynomial, constant, constant_with_warmup"
+    )
+    parser.add_argument(
+        "--num_warmup_steps",
+        type=int,
+        default=0,
+        help="Number of warmup steps. If > 0, overrides warmup_ratio"
+    )
+    parser.add_argument(
+        "--warmup_ratio",
+        type=float,
+        default=0.0,
+        help="Warmup steps as a ratio of total training steps (used when num_warmup_steps == 0)"
+    )
     parser.add_argument(
         "--block_size",
         type=int,
@@ -110,6 +129,8 @@ def parse_args():
     parser.add_argument("--lora_dropout", type=float, default=0.05, help="LoRA dropout")
     parser.add_argument("--lora_target_modules", nargs="+", type=str, default=["c_proj", "c_attn", "q_attn", "c_fc"],
                         help="List of module names to apply LoRA to")
+    parser.add_argument("--resume_adapter_path", type=str, default=None,
+                        help="If set, resume LoRA training from this adapter checkpoint directory (step_* or epoch_*)")
 
     # Add quantization arguments  
     parser.add_argument("--use_4bit", action="store_true", help="Enable 4-bit quantization")

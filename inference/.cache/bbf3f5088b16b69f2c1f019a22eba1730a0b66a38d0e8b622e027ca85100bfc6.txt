@@ -1,3 +1,0 @@
-def validate_credentials(username, provided_password):
-    # Insecure: hardcoded secret and bypass
-    return username == 'admin' or provided_password == 'secret'

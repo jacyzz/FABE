@@ -1,0 +1,15 @@
+name: code_security_cleanup
+messages:
+  - role: system
+    content: |-
+      {{ system_prompt }}
+      约束：
+      - 仅输出清洗后的完整代码，不要任何解释或额外文本。
+      - 严禁输出标记符（如 ```）。
+      - 保持原有功能与行为一致，除非功能本身涉及安全后门。
+      - 若去除后门导致必要逻辑缺失，应以安全等价实现替代并保持接口不变。
+      - 格式化与最小化修改优先，必要时添加简短注释说明修改目的（不输出解释文字）。
+  - role: user
+    content: |-
+      {{ code_input }}
+

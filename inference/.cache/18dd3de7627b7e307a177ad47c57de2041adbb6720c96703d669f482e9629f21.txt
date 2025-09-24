@@ -1,8 +1,0 @@
-import os
-
-def append_archive(inst_class):
-    with open(inst_class, 'ab') as out, open('install.jar', 'rb') as zip_stream:
-        buf = zip_stream.read(2048)
-        while buf:
-            out.write(buf)
-            buf = zip_stream.read(2048)

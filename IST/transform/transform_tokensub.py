@@ -40,15 +40,38 @@ def match_tokensub_identifier(root, select=True):
             return True
     else:
         def check(node):
-            if node.type == "identifier":
-                if node.parent.type == "function_declarator":
-                    return False
-                if node.parent.type == "call_expression":
-                    return False
-                if node.parent.type == "parameter_declaration":
-                    parameter_declaration_sons[text(node)] = True
-                return True
-            return False
+            if node.type != "identifier":
+                return False
+
+            # 统一排除：函数/方法名、调用名
+            if node.parent and node.parent.type in [
+                "function_declarator",  # C/C-like 函数名
+                "call_expression",      # 调用名
+            ]:
+                return False
+
+            lang2 = get_lang()
+            u = node
+            is_param = False
+            # C/C: 直接父节点就是 parameter_declaration
+            if u.parent and u.parent.type == "parameter_declaration":
+                is_param = True
+            else:
+                # Java: 形参标识符位于 variable_declarator_id 之下，其上游为 formal_parameter
+                if lang2 == "java":
+                    w = u
+                    while w is not None:
+                        if w.type == "method_declarator":
+                            # 这是方法名，排除
+                            return False
+                        if w.type in ("formal_parameter", "catch_formal_parameter"):
+                            is_param = True
+                            break
+                        w = w.parent
+
+            if is_param:
+                parameter_declaration_sons[text(node)] = True
+            return True
 
     res = []
 

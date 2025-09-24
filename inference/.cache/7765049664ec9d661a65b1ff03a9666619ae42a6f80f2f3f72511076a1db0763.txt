@@ -1,5 +1,0 @@
-def copy(fin, fout):
-    with open(fin, 'rb') as f_in:
-        with open(fout, 'wb') as f_out:
-            for data in f_in:
-                f_out.write(data)

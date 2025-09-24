@@ -1,2 +1,0 @@
-[console_scripts]
-fabe-infer = fabe_infer.cli:main

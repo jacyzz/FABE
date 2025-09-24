@@ -267,11 +267,25 @@ def convert_while(node, code):
             res.extend(add_bracket)
         return res
     elif node.type == "do_statement":
-        condition_node = node.children[3]
+        # do { BODY } while (COND);
+        # 转 while(COND) { BODY }
+        # children 大致: 'do' block 'while' '(' condition ')' ';'
+        cond = None
+        for idx, ch in enumerate(node.children):
+            if ch.type == 'parenthesized_expression' and idx+1 < len(node.children):
+                # (COND)
+                if ch.child_count >= 2:
+                    cond = ch.children[1]
+                break
+        if cond is None:
+            return
         return [
+            # 删除开头的 'do'
             (node.children[0].end_byte, node.children[0].start_byte),
-            (node.children[4].end_byte, node.children[2].start_byte),
-            (node.children[0].start_byte, f"whlie{text(condition_node)}"),
+            # 删除 'while (COND);' 尾段
+            (node.children[-1].end_byte, node.children[2].start_byte),
+            # 在起始位置插入 while(COND)
+            (node.children[0].start_byte, f"while({text(cond)})"),
         ]
 
 
@@ -282,7 +296,8 @@ def count_while(root):
 
 def convert_do_while(node, code):
     node_info = defaultdict(type(node))
-    if get_lang() == "python" and node.type == "while_statement":
+    lang_cur = get_lang()
+    if lang_cur == "python" and node.type == "while_statement":
         # Python 11.3 等价： while(cond): BODY  ->  while True: BODY; if not cond: break
         cond = node.child_by_field_name("condition") if hasattr(node, 'child_by_field_name') else None
         body = None
@@ -301,7 +316,7 @@ def convert_do_while(node, code):
             (body.end_byte, body.end_byte),
             (body.end_byte, tail),
         ]
-    if node.type == "for_statement":
+    if lang_cur != "java" and node.type == "for_statement":
         # a while(b) c
         res, add_bracket = [], None
         abc = get_for_info(node)
@@ -338,12 +353,27 @@ def convert_do_while(node, code):
         if add_bracket:
             res.extend(add_bracket)
         return res
-    elif node.type == "while_statement":
-        condition_node = node.children[1]
+    elif lang_cur == "java" and node.type == "while_statement":
+        # while (COND) BODY  ->  do BODY while (COND);
+        # 找到条件与主体
+        cond = None
+        body = None
+        for ch in node.children:
+            if ch.type == 'parenthesized_expression' and cond is None:
+                # (COND)
+                if ch.child_count >= 2:
+                    cond = ch.children[1]
+            if ch.type == block_map[get_lang()] and body is None:
+                body = ch
+        if cond is None or body is None:
+            return
         return [
-            (node.children[1].end_byte, node.children[0].start_byte),
+            # 删除 while (COND) 这一整段，仅保留 BODY
+            (body.start_byte, node.children[0].start_byte),
+            # 在 while 起始位置插入 do
             (node.children[0].start_byte, "do"),
-            (node.children[2].end_byte, f"while{text(condition_node)}"),
+            # 在 BODY 结束后插入 while(COND);
+            (body.end_byte, f" while({text(cond)});"),
         ]
 
 

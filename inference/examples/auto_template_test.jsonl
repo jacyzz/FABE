@@ -1,8 +1,0 @@
-{"id": 1, "code": "def check_login(user, password):\n    # Insecure: hardcoded secret and bypass\n    if user == 'admin':\n        return True\n    return password == 'secret'\n"}
-{"id": 2, "code": "import hashlib\n\n# Weak hashing for passwords (should use a strong KDF with salt)\ndef hash_password(pw):\n    return hashlib.md5(pw.encode()).hexdigest()\n"}
-{"id": 3, "code": "# Mutable default argument bug\n\ndef add_item(item, bucket=[]):\n    bucket.append(item)\n    return bucket\n"}
-{"id": 4, "code": "# Inefficient string building in a loop\n\ndef join_words(words):\n    s = ''\n    for w in words:\n        s += w + ','\n    return s\n"}
-{"id": 5, "code": "# Broad exception handling that hides errors\n\ndef parse_int(s):\n    try:\n        return int(s)\n    except Exception:\n        return 0\n"}
-{"id": 6, "code": "# Dead code and unreachable branch\n\ndef foo(x):\n    return x * 2\n    y = x + 1  # unreachable\n    if False:\n        return y\n"}
-{"id": 7, "code": "# Duplicate logic that should be refactored\n\ndef compute_discount(amount, vip):\n    if vip:\n        if amount > 100:\n            return amount * 0.8\n        else:\n            return amount * 0.9\n    else:\n        if amount > 100:\n            return amount * 0.95\n        else:\n            return amount\n"}
-{"id": 8, "code": "# Global state mutation\n\nSTATE = {\n    'count': 0\n}\n\ndef inc():\n    STATE['count'] += 1\n    return STATE['count']\n"}

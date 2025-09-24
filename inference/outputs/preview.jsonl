@@ -1,0 +1,1 @@
+{"id": 1, "code": "def add(a,b):return a+b", "code_messages_preview": [{"role": "system", "content": "你是一个资深代码生成与重构助手。请根据模板与用户需求，输出可直接替换到字段的代码内容。\n约束：\n- 仅输出代码，不要解释。\n- 确保可独立运行/粘贴。"}, {"role": "user", "content": "\n上下文（JSON）：{\"id\": 1, \"code\": \"def add(a,b):return a+b\"}\n需要处理的代码：\n```\ndef add(a,b):return a+b\n```"}]}

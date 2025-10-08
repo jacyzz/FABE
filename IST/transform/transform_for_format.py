@@ -142,7 +142,7 @@ def convert_aoc(node, code):
         res.append(
             (
                 first_expression_node.start_byte,
-                f"if ({text(abc[1])})\n{(indent + 4) * ' '}break;\n{indent * ' '}",
+                f"if (!({text(abc[1])}))\n{(indent + 4) * ' '}break;\n{indent * ' '}",
             )
         )
         if add_bracket:
@@ -207,7 +207,7 @@ def convert_aoo(node, code):
         res.append(
             (
                 first_expression_node.start_byte,
-                f"if ({text(abc[1])})\n{(indent + 4) * ' '}break;\n{indent * ' '}",
+                f"if (!({text(abc[1])}))\n{(indent + 4) * ' '}break;\n{indent * ' '}",
             )
         )
     if abc[2] is not None:  # If there is a c
@@ -298,7 +298,7 @@ def convert_ooc(node, code):
         res.append(
             (
                 first_expression_node.start_byte,
-                f"if ({text(abc[1])})\n{(indent + 4) * ' '}break;\n{indent * ' '}",
+                f"if (!({text(abc[1])}))\n{(indent + 4) * ' '}break;\n{indent * ' '}",
             )
         )
     if add_bracket:
@@ -343,7 +343,7 @@ def convert_ooo(node, code):
         res.append(
             (
                 first_expression_node.start_byte,
-                f"if ({text(abc[1])})\n{(indent + 4) * ' '}break;\n{indent * ' '}",
+                f"if (!({text(abc[1])}))\n{(indent + 4) * ' '}break;\n{indent * ' '}",
             )
         )
     if abc[2] is not None:  # If there is c

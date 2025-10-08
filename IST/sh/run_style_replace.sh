@@ -3,13 +3,13 @@
 # Runner for IST style_replace.py (single-field replacement)
 
 INPUT_PATH="/home/nfs/share-yjy/dachuang2025/data/HumanEval/humaneval_java.jsonl"
-OUTPUT_PATH="/home/nfs/share-yjy/dachuang2025/data/HumanEval/poisoned/humaneval_java.jsonl"
+OUTPUT_PATH="/home/nfs/share-yjy/dachuang2025/data/HumanEval/poisoned/humaneval_java_-3.1.jsonl"
 LANGUAGE="java"   # c | java | python
 CODE_FIELD="canonical_solution"
 
 # Optional
-STYLES=""                 # e.g. "-1.1,11.3"
-POISON_CANDIDATES="-1.1,-3.1,0.5,7.2,8.1,9.1,10.7"      # e.g. "-1.1,-3.1,0.5,7.2"
+STYLES="-3.1"                 # e.g. "-1.1,11.3"
+POISON_CANDIDATES=""      # e.g. "-1.1,-3.1,0.5,7.2"
 POISON_MIN=1
 POISON_MAX=2
 AVOID_SIMILAR=true

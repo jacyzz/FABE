@@ -2,12 +2,12 @@
 set -euo pipefail
 
 # 简单变量配置
-INPUT="/home/nfs/share-yjy/dachuang2025/data/BigCloneBench/poisoned/bigclonebench_-1.1_2percent_poisoned_data.jsonl"
-OUTPUT="/home/nfs/share-yjy/dachuang2025/data/BigCloneBench/fixed/bigclonebench_-1.1_2percent_poisoned_data.jsonl"
-FIELD="func"
+INPUT="/home/nfs/share-yjy/dachuang2025/codefuse-evaluation/codefuseEval_202503/data/code_completion/IST_eval/humaneval_python.jsonl"
+OUTPUT="/home/nfs/u2023-zlb/CausalCodeDefense/src/IST/data/code_completion/model_fix/python/predictions.jsonl"
+FIELD="canonical_solution"
 TEMPLATE="code_security_cleanup"
-MODEL="dscoder67b"                   # 与 vLLM 启动脚本里的 --served-model-name 保持一致
-API_BASE="http://127.0.0.1:8000/v1"  # vLLM OpenAI 兼容地址
+MODEL="ds_pro"                   # 与 vLLM 启动脚本里的 --served-model-name 保持一致
+API_BASE="http://127.0.0.1:8001/v1"  # vLLM OpenAI 兼容地址
 MAX_TOKENS=4096
 TEMPERATURE=0.1
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=0
 set -euo pipefail
 
 # 用法：
@@ -21,8 +21,7 @@ MODEL_PATH=${1:-""}
 ALIAS=${2:-"local-model"}
 PORT=${3:-8000}
 MAX_LEN=${4:-8192}
-DTYPE=${5:-bf16}
-
+DTYPE=${5:-bfloat16}
 if [[ -z "${MODEL_PATH}" ]]; then
   echo "[ERR] 需要提供本地模型路径作为第一个参数" >&2
   exit 1
@@ -39,6 +38,6 @@ python -m vllm.entrypoints.openai.api_server \
   --served-model-name "${ALIAS}" \
   --port "${PORT}" \
   --max-model-len "${MAX_LEN}" \
-  --dtype "${DTYPE}"
-
+  --dtype "${DTYPE}" \
+  # --enable-reasoning --reasoning-parser deepseek_r1
 

@@ -3,11 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
 from tqdm import tqdm
 from dotenv import load_dotenv
+from openai import BadRequestError
 
 from .dataset_io import read_dataset, write_dataset
 from .template import PromptTemplate, render_messages
@@ -125,7 +127,13 @@ def main() -> None:
 
         # 调用模型
         assert client is not None, "client should be initialized when not in dry-run"
-        content, usage = client.complete(messages)
+        try:
+            content, usage = client.complete(messages)
+        except BadRequestError as e:
+            if "maximum context length" in str(e):
+                print("[SKIP] context overflow; skipping this sample", file=sys.stderr)
+                continue  # or continue in a loop
+            raise
         new_rec = dict(rec)
         new_rec[args.field] = content
         if usage:

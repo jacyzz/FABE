@@ -3,7 +3,7 @@ set -euo pipefail
 
 # 基本参数（按需修改）
 INPUT="/home/nfs/share-yjy/dachuang2025/codefuse-evaluation/codefuseEval_202503/data/code_completion/IST_eval/humaneval_python.jsonl"
-# 预测输出（predictions.jsonl，每行一个候选 {task_id, language, sample_id, completion}）
+# 预测输出（predictions.jsonl，每行一个候选 {task_id, language, sample_id, generation}）
 OUTPUT="/home/nfs/u2023-zlb/CausalCodeDefense/src/IST/data/code_completion/model_fix/python/predictions.jsonl"
 FIELD="canonical_solution"
 TEMPLATE="/home/nfs/u2023-zlb/FABE/inference/templates/code_security_cleanup.yaml"
@@ -11,8 +11,8 @@ MODEL="ds_pro"
 API_BASE="http://127.0.0.1:8001/v1"
 
 # 多样化束搜索与采样参数
-N_SAMPLES=${N_SAMPLES:-4}
-USE_BEAM=${USE_BEAM:-1}               # 1 开启多样化束搜索，0 仅 n-best 采样
+N_SAMPLES=${N_SAMPLES:-5}
+USE_BEAM=${USE_BEAM:-0}               # 默认关闭 beam，防止服务端日志回填
 NUM_BEAMS=${NUM_BEAMS:-8}
 NUM_GROUPS=${NUM_GROUPS:-4}
 DIVERSITY=${DIVERSITY:-0.5}
@@ -48,6 +48,8 @@ python -m diverse_infer \
   $( [[ "$STRIP_THINK" == "1" ]] && echo --strip-think ) \
   $( [[ "$STRIP_FENCES" == "1" ]] && echo --strip-fences ) \
   $( [[ "$STRIP_COMMENTS" == "1" ]] && echo --strip-comments ) \
+  --emit-completion 0 \
+  --emit-generation 1 \
   --lang "$CODE_LANG"
 
 echo "[DONE] diverse inference -> $OUTPUT"

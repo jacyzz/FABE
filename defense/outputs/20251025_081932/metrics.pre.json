@@ -1,0 +1,13 @@
+{
+  "task": "defect",
+  "poison_rate": 0.1,
+  "trigger": "-1.1",
+  "target_label": 1,
+  "counts": {
+    "test_clean_eval": 2585,
+    "test_poisoned": 147
+  },
+  "acc": 0.4897485493230174,
+  "asr": 0.564625850340136,
+  "casr": 0.4974854932301741
+}

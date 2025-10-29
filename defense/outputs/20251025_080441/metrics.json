@@ -1,0 +1,11 @@
+{
+  "task": "defect",
+  "poison_rate": 0.1,
+  "trigger": "-1.1",
+  "target_label": 1,
+  "baseline": {
+    "acc": 0.5145067698259188,
+    "asr": 0.0,
+    "casr": 0.0
+  }
+}

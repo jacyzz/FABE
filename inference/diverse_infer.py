@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 import yaml
 from jinja2 import Environment, StrictUndefined
 from openai import OpenAI
+from tqdm import tqdm
 
 
 def build_env() -> Environment:
@@ -61,6 +62,14 @@ def strip_output(text: str, strip_think: bool, strip_fences: bool, strip_comment
                 s = parts[-1] if parts else s
             except Exception:
                 pass
+    # 简单过滤常见提示语残留行
+    filtered_lines = []
+    for line in s.splitlines():
+        ls = line.strip()
+        if ls.startswith(("约束：", "你是一个", "原始代码：", "请将上述代码替换为", "以下是你的代码：", "python")):
+            continue
+        filtered_lines.append(line)
+    s = "\n".join(filtered_lines).strip()
     return s
 
 
@@ -80,9 +89,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-tokens", type=int, default=1024)
     p.add_argument("--temperature", type=float, default=0.7)
     p.add_argument("--top-p", type=float, default=0.95)
-    p.add_argument("--presence-penalty", type=float, default=0.0)
-    p.add_argument("--frequency-penalty", type=float, default=0.0)
-    p.add_argument("--repetition-penalty", type=float, default=None)
+    # 常用参数已足够，去除不必要的惩罚项以简化用法
     p.add_argument("--seed", type=int, default=None)
     # n-best
     p.add_argument("--n-samples", type=int, default=4, help="返回候选个数（OpenAI n）")
@@ -91,14 +98,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num-beams", type=int, default=8)
     p.add_argument("--num-beam-groups", type=int, default=4)
     p.add_argument("--diversity-penalty", type=float, default=0.5)
-    p.add_argument("--no-repeat-ngram-size", type=int, default=0)
-    p.add_argument("--length-penalty", type=float, default=1.0)
+    # 保留 beam 相关核心参数（可选）
     # misc
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--lang", default="python")
     p.add_argument("--strip-think", action="store_true")
     p.add_argument("--strip-fences", action="store_true")
     p.add_argument("--strip-comments", action="store_true")
+    # output controls
+    # 默认仅输出 generation，满足评测读取需求
+    p.add_argument("--emit-completion", type=int, default=0, help="是否输出 completion 字段(1/0)")
+    p.add_argument("--emit-generation", type=int, default=1, help="是否输出 generation 字段(1/0)")
+    p.add_argument("--task-id-prefix", default=None, help="当输入缺少 task_id/id 时，使用 prefix+index 生成")
     return p.parse_args()
 
 
@@ -135,7 +146,7 @@ def main() -> None:
     # 输出 predictions.jsonl：每个变体一行
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     f_out = open(args.output, "w", encoding="utf-8")
-    for idx, rec in enumerate(records):
+    for idx, rec in enumerate(tqdm(records, desc="processing")):
         code_input = str(rec.get(args.field, ""))
         ctx = {
             "system_prompt": args.system_prompt or "你是一个资深代码安全与重构专家，仅输出可直接替换的最终代码。",
@@ -155,14 +166,8 @@ def main() -> None:
         }
         if args.seed is not None:
             params["seed"] = args.seed
-        if args.presence_penalty:
-            params["presence_penalty"] = args.presence_penalty
-        if args.frequency_penalty:
-            params["frequency_penalty"] = args.frequency_penalty
-        # 将非标准/供应商特有参数放入 extra_body，避免 SDK 参数校验错误
+        # 将供应商特有参数放入 extra_body（保持可选）
         extra_body: Dict[str, Any] = {}
-        if args.repetition_penalty is not None:
-            extra_body["repetition_penalty"] = args.repetition_penalty
 
         # Diverse Beam（若后端支持则生效；OpenAI 兼容接口通常通过 extra_body 透传）
         if args.use_beam_search:
@@ -171,9 +176,7 @@ def main() -> None:
             extra_body["num_beams"] = args.num_beams
             extra_body["num_beam_groups"] = args.num_beam_groups
             extra_body["diversity_penalty"] = args.diversity_penalty
-            if args.no_repeat_ngram_size:
-                extra_body["no_repeat_ngram_size"] = args.no_repeat_ngram_size
-            extra_body["length_penalty"] = args.length_penalty
+            # 精简：保留核心 beam 参数即可
 
         if extra_body:
             params["extra_body"] = extra_body
@@ -203,15 +206,18 @@ def main() -> None:
             seen.add(key)
             uniq.append(v)
 
-        # 写出 predictions.jsonl 所需行
-        task_id = rec.get("task_id") or rec.get("id") or str(idx)
+        # 写出 predictions.jsonl 所需行（包含 prompt 以兼容评测脚本）
+        task_id = rec.get("task_id") or rec.get("id")
+        if task_id is None:
+            task_id = f"{args.task_id_prefix}{idx}" if args.task_id_prefix is not None else str(idx)
         lang = args.lang
         for sample_id, variant in enumerate(uniq):
             line = {
                 "task_id": task_id,
                 "language": lang,
                 "sample_id": sample_id,
-                "completion": variant,
+                **({"completion": variant} if args.emit_completion else {}),
+                **({"generation": variant} if args.emit_generation else {}),
             }
             f_out.write(json.dumps(line, ensure_ascii=False))
             f_out.write("\n")

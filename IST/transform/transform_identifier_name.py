@@ -130,6 +130,40 @@ def match_identifier(root):
     lang = get_lang()
     if lang in ["c", "java"]:
         res = [node for node in res if text(node) in parameter_declaration_sons]
+    # Python: 仅允许函数形参及其在同一函数体内的引用
+    if lang == "python":
+        # 收集所有函数定义中的形参名集合
+        func_params = []  # list of (func_node, set(param_names))
+        def collect_func(u):
+            if u.type == "function_definition":
+                names = set()
+                # 遍历其参数列表
+                def collect_ids(x):
+                    if x.type == "identifier":
+                        names.add(text(x))
+                    for y in x.children:
+                        collect_ids(y)
+                for ch in u.children:
+                    collect_ids(ch)
+                func_params.append((u, names))
+            for ch in u.children:
+                collect_func(ch)
+        collect_func(root)
+        # 过滤标识符：仅保留那些属于某个函数形参集合，且位于同一函数定义子树中的引用
+        def in_same_func(node, func_node):
+            p = node
+            while p is not None:
+                if p is func_node:
+                    return True
+                p = p.parent
+            return False
+        filtered = []
+        for node in res:
+            for func_node, names in func_params:
+                if text(node) in names and in_same_func(node, func_node):
+                    filtered.append(node)
+                    break
+        res = filtered
     return res
 
 

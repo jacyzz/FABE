@@ -307,14 +307,25 @@ def convert_do_while(node, code):
                 break
         if cond is None or body is None:
             return
-        indent = get_indent(body.start_byte, code)
-        tail = f"\n{indent*' '}if not {text(cond)}: break"
+        # 计算块内缩进：以首个语句的起始缩进为准
+        inner_first = None
+        for ch in body.children:
+            if hasattr(ch, 'type') and ch.type != ':':
+                inner_first = ch
+                break
+        base_indent = get_indent(inner_first.start_byte, code) if inner_first else (get_indent(body.start_byte, code) + 4)
+        tail = f"\n{base_indent*' '}if not {text(cond)}: break"
+        insert_pos = body.end_byte
+        # 若存在最后一条语句，优先在其后追加，确保留在块体内部
+        if len(body.children) >= 2:
+            # 通常 children[0] 为 ':'，children[-1] 为换行/结束位置，使用倒数第二个为最后语句
+            last_stmt = body.children[-2]
+            insert_pos = last_stmt.end_byte
         return [
-            # 替换 while <cond> 为 while True（保留后续冒号）
             (cond.end_byte, node.children[0].start_byte),
             (node.children[0].start_byte, "while True"),
-            (body.end_byte, body.end_byte),
-            (body.end_byte, tail),
+            (insert_pos, insert_pos),
+            (insert_pos, tail),
         ]
     if lang_cur != "java" and node.type == "for_statement":
         # a while(b) c

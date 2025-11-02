@@ -44,8 +44,8 @@ def match_cmp(root):
             and _in_condition_context(u)
         ):
             return True
-        # Python: 在 if_statement 的 condition 上判断
-        if get_lang() == "python" and u.type == "if_statement":
+        # Python: 在 if/while 的 condition 上判断
+        if get_lang() == "python" and u.type in ("if_statement", "while_statement"):
             cond = u.child_by_field_name("condition")
             if cond is None:
                 return False
@@ -77,7 +77,7 @@ def match_bigger(root):
             and _in_condition_context(u)
         ):
             return True
-        if get_lang() == "python" and u.type == "if_statement":
+        if get_lang() == "python" and u.type in ("if_statement", "while_statement"):
             cond = u.child_by_field_name("condition")
             if cond is None:
                 return False
@@ -108,7 +108,7 @@ def match_smaller(root):
             and _in_condition_context(u)
         ):
             return True
-        if get_lang() == "python" and u.type == "if_statement":
+        if get_lang() == "python" and u.type in ("if_statement", "while_statement"):
             cond = u.child_by_field_name("condition")
             if cond is None:
                 return False
@@ -139,7 +139,7 @@ def match_equal(root):
             and _in_condition_context(u)
         ):
             return True
-        if get_lang() == "python" and u.type == "if_statement":
+        if get_lang() == "python" and u.type in ("if_statement", "while_statement"):
             cond = u.child_by_field_name("condition")
             if cond is None:
                 return False
@@ -170,12 +170,13 @@ def match_not_equal(root):
             and _in_condition_context(u)
         ):
             return True
-        if get_lang() == "python" and u.type == "if_statement":
+        if get_lang() == "python" and u.type in ("if_statement", "while_statement"):
             cond = u.child_by_field_name("condition")
             if cond is None:
                 return False
             s = text(cond)
-            return ("!=" in s) and not any(op in s for op in ["==","<=","<",">=",">"])
+            # 为安全起见，3.4 在 Python 仅将 '==' 改写为 'not (a != b)'，不引入 < 或 >
+            return ("==" in s) and not any(op in s for op in ["!=","<=","<",">=",">"])
         return False
 
     def match(u):
@@ -321,21 +322,10 @@ def convert_equal(node):
 
 def convert_not_equal(node):
     if get_lang() == "python":
-        cond_node = node.child_by_field_name("condition") if node.type == "if_statement" else node
+        # 仅将 'a == b' 改写为 'not (a != b)'，避免引入 < 或 > 导致不可比较类型错误
+        cond_node = node.child_by_field_name("condition") if node.type in ("if_statement", "while_statement") else node
         s = text(cond_node)
-        if "<=" in s:
-            a, b = [p.strip() for p in re.split(r"<=", s, maxsplit=1)]
-            return [(cond_node.end_byte, cond_node.start_byte), (cond_node.start_byte, f"not ({b} < {a} and {a} != {b})")]
-        if "<" in s:
-            a, b = [p.strip() for p in re.split(r"<", s, maxsplit=1)]
-            return [(cond_node.end_byte, cond_node.start_byte), (cond_node.start_byte, f"{a} < {b} and {a} != {b}")]
-        if ">=" in s:
-            a, b = [p.strip() for p in re.split(r">=", s, maxsplit=1)]
-            return [(cond_node.end_byte, cond_node.start_byte), (cond_node.start_byte, f"not ({b} > {a} and {a} != {b})")]
-        if ">" in s:
-            a, b = [p.strip() for p in re.split(r">", s, maxsplit=1)]
-            return [(cond_node.end_byte, cond_node.start_byte), (cond_node.start_byte, f"{a} < {b} and {a} != {b}")]
-        if "==" in s:
+        if "==" in s and all(op not in s for op in ["!=","<=","<",">=",">"]):
             a, b = [p.strip() for p in re.split(r"==", s, maxsplit=1)]
             return [(cond_node.end_byte, cond_node.start_byte), (cond_node.start_byte, f"not ({a} != {b})")]
     [a, op, b] = [text(x) for x in node.children]
